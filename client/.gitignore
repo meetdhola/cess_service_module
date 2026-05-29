@@ -16,7 +16,6 @@ dist-ssr
 .sql
 .zip
 /build/*
-/uploads/*
 
 # Editor directories and files
 .vscode/*

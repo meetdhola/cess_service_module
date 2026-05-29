@@ -14,7 +14,7 @@ node_modules/
 dist
 dist-ssr
 *.local
-*.sql
+/db/*.sql
 .zip
 /build/*
 

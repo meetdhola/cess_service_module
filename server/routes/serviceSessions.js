@@ -127,18 +127,31 @@ router.get('/my', svcAuth(['plc','wireman']), async (req, res) => {
 });
 
 // ── GET /api/service/sessions/active ─────────────────────────────────────
+// Returns ALL of this worker's running + paused sessions (concurrent timers).
 router.get('/active', svcAuth(['plc','wireman']), async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT ws.*, st.ticket_id AS ticket_no, st.customer_name, st.service_type, st.id AS svc_ticket_id
        FROM work_sessions ws JOIN service_tickets st ON st.id=ws.ticket_id
        WHERE ws.worker_id=$1 AND ws.status IN ('running','paused')
-       ORDER BY ws.created_at DESC LIMIT 1`,
+       ORDER BY ws.created_at DESC`,
       [req.svcUser.id]
     );
-    res.json(rows[0] || null);
+    res.json(rows);   // ← array now, not a single object
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
+// router.get('/active', svcAuth(['plc','wireman']), async (req, res) => {
+//   try {
+//     const { rows } = await pool.query(
+//       `SELECT ws.*, st.ticket_id AS ticket_no, st.customer_name, st.service_type, st.id AS svc_ticket_id
+//        FROM work_sessions ws JOIN service_tickets st ON st.id=ws.ticket_id
+//        WHERE ws.worker_id=$1 AND ws.status IN ('running','paused')
+//        ORDER BY ws.created_at DESC LIMIT 1`,
+//       [req.svcUser.id]
+//     );
+//     res.json(rows[0] || null);
+//   } catch (e) { res.status(500).json({ error: e.message }); }
+// });
 
 // ── GET /api/service/sessions/all ────────────────────────────────────────
 router.get('/all', svcAuth(['superadmin','admin']), async (req, res) => {

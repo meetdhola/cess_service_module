@@ -23,3 +23,76 @@
   /* Subtle visual hint without strikethrough */
   opacity: 0.85;
 }
+/* Hide scrollbars on horizontally scrollable elements */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+/* Tab indicator pulse on activation */
+@keyframes tab-pop {
+  0%   { transform: scale(0.85); opacity: 0 }
+  100% { transform: scale(1);    opacity: 1 }
+}
+/* ─── Premium bottom bar animations ─── */
+@keyframes lift-up {
+  0%   { transform: translateY(0) scale(1); }
+  60%  { transform: translateY(-3px) scale(1.05); }
+  100% { transform: translateY(-2px) scale(1.02); }
+}
+@keyframes panel-expand {
+  0%   { transform: translateY(8px) scale(0.95); opacity: 0; max-height: 0; }
+  100% { transform: translateY(0) scale(1);     opacity: 1; max-height: 200px; }
+}
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+@keyframes pulse-ring {
+  0%   { transform: scale(1);   opacity: 0.8; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+@keyframes count-bounce {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.15); }
+}
+
+.cmd-lift      { animation: lift-up 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+.cmd-expand    { animation: panel-expand 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+.cmd-shimmer   { background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent); background-size: 200% 100%; animation: shimmer 2.5s linear infinite; }
+.cmd-ring      { animation: pulse-ring 1.8s cubic-bezier(0, 0, 0.2, 1) infinite; }
+.cmd-bounce    { animation: count-bounce 0.4s ease-out; }
+
+/* Glass with proper iOS-style highlight */
+.cmd-glass {
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  border: 0.5px solid rgba(255, 255, 255, 0.6);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.8) inset,
+    0 0 0 0.5px rgba(0, 0, 0, 0.04),
+    0 12px 32px rgba(15, 23, 42, 0.10),
+    0 4px 12px rgba(15, 23, 42, 0.04),
+    0 2px 6px rgba(15, 23, 42, 0.02);
+}
+
+.cmd-glass-dark {
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  border: 0.5px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.1) inset,
+    0 12px 40px rgba(0, 0, 0, 0.4),
+    0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+/* Tabular numbers for live timer */
+.cmd-mono {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1, 'cv11' 1;
+  letter-spacing: -0.02em;
+}

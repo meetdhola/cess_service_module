@@ -31,6 +31,9 @@ app.use('/api/service/auth',     require('./routes/serviceAuth'));
 app.use('/api/service/tickets',  require('./routes/serviceTickets'));
 app.use('/api/service/sessions', require('./routes/serviceSessions'));
 app.use('/api/service/reports',  require('./routes/serviceReports'));
+app.use('/api/service/reports',  require('./routes/serviceProfitability'));
+app.use('/api/service', require('./routes/servicePhase2'));
+app.use('/api/service/notifications', require('./routes/serviceNotifications.js'))
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 

@@ -118,6 +118,25 @@ router.get('/my', svcAuth(['plc','wireman']), async (req, res) => {
 });
 
 /* ─── GET /api/service/tickets/:id ─── */
+
+/* ─── GET /api/service/parties/search ─── */
+router.get('/parties/search', async (req, res) => {
+  const q = (req.query.q || '').trim();
+  if (q.length < 1) return res.json([]);
+  try {
+    const { rows } = await pool.query(
+      `SELECT code, name, city, state, phone, email
+         FROM party_master
+        WHERE is_active = TRUE
+          AND (name ILIKE $1 OR city ILIKE $1)
+        ORDER BY CASE WHEN name ILIKE $2 THEN 0 ELSE 1 END, name ASC
+        LIMIT 10`,
+      [`%${q}%`, `${q}%`]
+    );
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.get('/:id', svcAuth(), async (req, res) => {
   try {
     const { rows } = await pool.query(`SELECT * FROM service_tickets WHERE id=$1`, [req.params.id]);

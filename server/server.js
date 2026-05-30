@@ -28,6 +28,26 @@ app.use('/api/users', require('./routes/users'));
 
 // ── Service module routes ──
 app.use('/api/service/auth',     require('./routes/serviceAuth'));
+
+/* ─── Party master search (public autocomplete) ─── */
+app.get('/api/service/parties/search', async (req, res) => {
+  const pool = require('./db/pool');
+  const q = (req.query.q || '').trim();
+  if (q.length < 1) return res.json([]);
+  try {
+    const { rows } = await pool.query(
+      `SELECT code, name, city, state, phone, email
+         FROM party_master
+        WHERE is_active = TRUE
+          AND (name ILIKE $1 OR city ILIKE $1)
+        ORDER BY CASE WHEN name ILIKE $2 THEN 0 ELSE 1 END, name ASC
+        LIMIT 10`,
+      [`%${q}%`, `${q}%`]
+    );
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.use('/api/service/tickets',  require('./routes/serviceTickets'));
 app.use('/api/service/sessions', require('./routes/serviceSessions'));
 app.use('/api/service/reports',  require('./routes/serviceReports'));

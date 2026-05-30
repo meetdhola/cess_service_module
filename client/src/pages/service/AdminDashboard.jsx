@@ -1958,26 +1958,55 @@ useEffect(() => {
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs">
-                    <thead className="bg-slate-50/50 border-b border-slate-100">
-                      <tr>{['Worker','Role','Department','Phone','Status'].map(h=><th key={h} className="text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider px-4 py-3">{h}</th>)}</tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {workers.length===0 ? <tr><td colSpan={5} className="text-center py-12 text-slate-400">No workers.</td></tr> : workers.map(w => (
-                        <tr key={w.id} className="hover:bg-slate-50/60">
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-2">
-                              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold text-white ${w.role==='plc'?'bg-blue-500':'bg-emerald-500'}`}>{w.name.split(' ').map(x=>x[0]).join('').slice(0,2)}</div>
-                              <span className="font-bold text-slate-800">{w.name}</span>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3"><span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${w.role==='plc'?'bg-blue-100 text-blue-700':'bg-emerald-100 text-emerald-700'}`}>{w.role==='plc'?'🖥 PLC':'⚡ Wireman'}</span></td>
-                          <td className="px-4 py-3 text-slate-600">{w.department||'—'}</td>
-                          <td className="px-4 py-3 text-slate-600 font-mono">{w.phone}</td>
-                          <td className="px-4 py-3"><span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-emerald-700"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"/>Active</span></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+  <thead className="bg-slate-50/50 border-b border-slate-100">
+    <tr>{['Worker','Role','Department','Phone','Status'].map(h=><th key={h} className="text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider px-4 py-3">{h}</th>)}</tr>
+  </thead>
+  <tbody className="divide-y divide-slate-100">
+    {workers.length===0 ? (
+      <tr><td colSpan={5} className="text-center py-12 text-slate-400">No workers.</td></tr>
+    ) : workers.map(w => {
+      const roleStyle = {
+        plc:        'bg-blue-100 text-blue-700',
+        wireman:    'bg-emerald-100 text-emerald-700',
+        admin:      'bg-violet-100 text-violet-700',
+        superadmin: 'bg-amber-100 text-amber-700',
+      }[w.role] || 'bg-slate-100 text-slate-600';
+
+      const avatarStyle = {
+        plc:        'bg-blue-500',
+        wireman:    'bg-emerald-500',
+        admin:      'bg-violet-500',
+        superadmin: 'bg-amber-500',
+      }[w.role] || 'bg-slate-400';
+
+      return (
+        <tr key={w.id} className="hover:bg-slate-50/60">
+          <td className="px-4 py-3">
+            <div className="flex items-center gap-2">
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold text-white ${avatarStyle}`}>
+                {w.name.split(' ').map(x=>x[0]).join('').slice(0,2)}
+              </div>
+              <span className="font-bold text-slate-800">{w.name}</span>
+            </div>
+          </td>
+          <td className="px-4 py-3">
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full capitalize ${roleStyle}`}>
+              {w.role}
+            </span>
+          </td>
+          <td className="px-4 py-3 text-slate-600">{w.department||'—'}</td>
+          <td className="px-4 py-3 text-slate-600 font-mono">{w.phone}</td>
+          <td className="px-4 py-3">
+            <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-emerald-700">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"/>
+              Active
+            </span>
+          </td>
+        </tr>
+      );
+    })}
+  </tbody>
+</table>
                 </div>
               </div>
             </div>

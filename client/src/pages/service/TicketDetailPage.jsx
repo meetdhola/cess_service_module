@@ -678,9 +678,9 @@ function WorkerBillingSummary({ svcUserId, billing }) {
             Expense {inrFmt(mine.expense_amount)}
           </span>
         )}
-        {hasCharged
+        {/* {hasCharged
           ? <span className="text-[11px] font-bold text-slate-700 bg-slate-100 px-2.5 py-1 rounded-full">Customer charged {inrFmt(mine.charged_amount)}</span>
-          : <span className="text-[11px] font-bold text-slate-500 italic">Charge will be entered by admin</span>}
+          : <span className="text-[11px] font-bold text-slate-500 italic">Charge will be entered by admin</span>} */}
       </div>
     </section>
   );

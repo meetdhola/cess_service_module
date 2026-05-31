@@ -147,6 +147,13 @@ export default function BillingAuditPanel({ ticketId, isWarranty, isPrivileged }
                       View completion report
                     </a>
                   )}
+                  {sg.expense_file_url && (
+                    <a href={fullUrl(sg.expense_file_url)} target="_blank" rel="noopener noreferrer"
+                       className="inline-flex items-center gap-1 text-amber-600 hover:text-amber-700 font-bold">
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                      View expense proof
+                    </a>
+                  )}
                 </div>
               )}
 

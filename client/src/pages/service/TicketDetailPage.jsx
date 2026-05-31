@@ -736,8 +736,9 @@ function BillingAuditMount({ ticketId, isWarranty, onChange }) {
 function WorkerBillingSummary({ svcUserId, billing }) {
   const mine = (billing || []).find(b => b.worker_id === svcUserId);
   if (!mine) return null;
-  const hasReport  = !!mine.completion_report_path;
+  const hasReport  = !!(mine.completion_report_path || mine.report_url);
   const hasCharged = mine.charged_amount != null;
+  const fullUrl = (u) => !u ? '#' : u.startsWith('http') ? u : `${window.location.protocol}//${window.location.hostname}:5001${u}`;
   return (
     <section className="bg-white rounded-3xl border border-slate-200/60 p-4">
       <p className="text-xs font-black text-slate-700 mb-2">Your billing on this ticket</p>
@@ -752,6 +753,21 @@ function WorkerBillingSummary({ svcUserId, billing }) {
           <span className="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full">
             Expense {inrFmt(mine.expense_amount)}
           </span>
+        )}
+        {/* File links */}
+        {(mine.completion_report_path || mine.report_url) && (
+          <a href={fullUrl(mine.report_url || mine.completion_report_path)} target="_blank" rel="noopener noreferrer"
+             className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-700 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-full">
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            View report
+          </a>
+        )}
+        {mine.expense_file_url && (
+          <a href={fullUrl(mine.expense_file_url)} target="_blank" rel="noopener noreferrer"
+             className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600 hover:text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full">
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            View expense proof
+          </a>
         )}
         {/* {hasCharged
           ? <span className="text-[11px] font-bold text-slate-700 bg-slate-100 px-2.5 py-1 rounded-full">Customer charged {inrFmt(mine.charged_amount)}</span>

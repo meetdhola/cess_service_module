@@ -402,11 +402,17 @@ router.get('/tickets/:id/full', svcAuth(), async (req, res) => {
 
     if (!ticket.rows.length) return res.status(404).json({ error: 'Ticket not found' });
 
+    const toUrl = (p) => !p ? null : p.startsWith('/uploads') ? p : `/uploads/${p}`;
+    const billingMapped = billing.rows.map(b => ({
+      ...b,
+      report_url:       toUrl(b.completion_report_path),
+      expense_file_url: toUrl(b.expense_file_path),
+    }));
     res.json({
       ticket:      ticket.rows[0],
       assignments: assignments.rows,
       sessions:    sessions.rows,
-      billing:     billing.rows,
+      billing:     billingMapped,
       challans:    challans.rows,
       notes:       notes.rows,
       media:       media.rows,

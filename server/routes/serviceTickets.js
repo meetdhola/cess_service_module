@@ -716,8 +716,19 @@ router.get('/:id/billing-status', svcAuth(), async (req, res) => {
         edited_at:        b?.edited_at || null,
         // NEW — worker completion side:
         expense_amount:   b ? Number(b.expense_amount || 0) : 0,
+        expense_note:     b?.expense_note || null,
         completed_at:     b?.completed_by_worker_at || null,
         has_report:       !!b?.completion_report_path,
+        report_url:       b?.completion_report_path
+                            ? (b.completion_report_path.startsWith('/uploads')
+                              ? b.completion_report_path
+                              : `/uploads/${b.completion_report_path}`)
+                            : null,
+        expense_file_url: b?.expense_file_path
+                            ? (b.expense_file_path.startsWith('/uploads')
+                              ? b.expense_file_path
+                              : `/uploads/${b.expense_file_path}`)
+                            : null,
       };
     });
 
@@ -1235,14 +1246,15 @@ router.post('/:id/worker-completion', svcAuth(['plc','wireman']), upload.fields(
     // 2) Upsert this worker's billing row with expense + report
     await pool.query(
       `INSERT INTO ticket_worker_billing
-         (ticket_id, worker_id, expense_amount, expense_note, completion_report_path, completed_by_worker_at)
-       VALUES ($1::uuid, $2::uuid, $3, $4, $5, NOW())
+         (ticket_id, worker_id, expense_amount, expense_note, completion_report_path, expense_file_path, completed_by_worker_at)
+       VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, NOW())
        ON CONFLICT (ticket_id, worker_id) DO UPDATE
          SET expense_amount         = EXCLUDED.expense_amount,
              expense_note           = EXCLUDED.expense_note,
              completion_report_path = EXCLUDED.completion_report_path,
+             expense_file_path      = COALESCE(EXCLUDED.expense_file_path, ticket_worker_billing.expense_file_path),
              completed_by_worker_at = NOW()`,
-      [ticketId, workerId, expense, note, reportPath]);
+      [ticketId, workerId, expense, note, reportPath, expenseFilePath]);
  
     // 3) Flip ticket to 'Report Submitted'
     const { rows: updated } = await pool.query(
@@ -1444,11 +1456,17 @@ router.get('/:id/full', svcAuth(), async (req, res) => {
     tk.plc_worker_names     = plcNames.join(', ');
     tk.wireman_worker_names = wmNames.join(', ');
  
+    const toUrl = (p) => !p ? null : p.startsWith('/uploads') ? p : `/uploads/${p}`;
+    const billingMapped = billing.rows.map(b => ({
+      ...b,
+      report_url:       toUrl(b.completion_report_path),
+      expense_file_url: toUrl(b.expense_file_path),
+    }));
     res.json({
       ticket:      tk,
       assignments: assignments.rows,
       sessions:    sessions.rows,
-      billing:     billing.rows,
+      billing:     billingMapped,
       challans:    challans.rows,
       notes:       notes.rows,
       documents:   documents.rows,
@@ -1517,7 +1535,7 @@ router.get('/:id/rate-suggestion', svcAuth(['admin','superadmin']), async (req, 
               ), 0) AS total_seconds,
               twb.charged_amount, twb.charged_note,
               twb.expense_amount, twb.expense_note,
-              twb.completion_report_path, twb.completed_by_worker_at
+              twb.completion_report_path, twb.expense_file_path, twb.completed_by_worker_at
          FROM assigned a
          JOIN service_users su ON su.id = a.worker_id
          LEFT JOIN ticket_worker_billing twb
@@ -1559,6 +1577,11 @@ router.get('/:id/rate-suggestion', svcAuth(['admin','superadmin']), async (req, 
         expense_amount:   w.expense_amount != null ? Number(w.expense_amount) : 0,
         expense_note:     w.expense_note || null,
         completed_at:     w.completed_by_worker_at || null,
+        expense_file_url: w.expense_file_path
+                            ? (w.expense_file_path.startsWith('/uploads')
+                              ? w.expense_file_path
+                              : `/uploads/${w.expense_file_path}`)
+                            : null,
         report_url:       w.completion_report_path
                             ? (w.completion_report_path.startsWith('/uploads')
                                 ? w.completion_report_path

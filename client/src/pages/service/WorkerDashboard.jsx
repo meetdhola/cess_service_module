@@ -625,14 +625,33 @@ function CompleteFlow({ tk, svcUser, busy, onComplete }) {
     );
   }
 
-  // Already submitted report: show submitted state + complete button
+  // Already submitted report: show submitted state + file links + complete button
+  const fullUrl = (u) => u?.startsWith('http') ? u : `${window.location.protocol}//${window.location.hostname}:5001${u}`;
   if (hasCompleted) {
     return (
-      <div className="ml-auto flex items-center gap-2 flex-wrap">
+      <div className="ml-auto flex flex-col items-end gap-2">
+        {/* Status badge + expense */}
         <span className="inline-flex items-center gap-1.5 text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-full">
           <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
           Report submitted{myEntry.expense_amount > 0 ? ` · exp ₹${Number(myEntry.expense_amount).toLocaleString('en-IN')}` : ''}
         </span>
+        {/* File links */}
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          {myEntry.report_url && (
+            <a href={fullUrl(myEntry.report_url)} target="_blank" rel="noopener noreferrer"
+               className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:text-blue-700 bg-blue-50 border border-blue-200 px-2 py-1 rounded-lg">
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              Completion report
+            </a>
+          )}
+          {myEntry.expense_file_url && (
+            <a href={fullUrl(myEntry.expense_file_url)} target="_blank" rel="noopener noreferrer"
+               className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-600 hover:text-amber-700 bg-amber-50 border border-amber-200 px-2 py-1 rounded-lg">
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              Expense proof
+            </a>
+          )}
+        </div>
         <button
           onClick={onComplete}
           disabled={busy}

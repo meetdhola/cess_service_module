@@ -248,7 +248,10 @@ router.post('/tickets/:id/notes', svcAuth(), async (req, res) => {
 
 router.post('/tickets/:id/worker-completion',
   svcAuth(['plc','wireman']),
-  upload.single('completion_report'),
+  upload.fields([
+    { name: 'report',       maxCount: 1 },
+    { name: 'expense_file', maxCount: 1 },
+  ]),
   async (req, res) => {
     const expenseRaw = req.body.expense_amount;
     const expense_note = req.body.expense_note?.toString().trim() || null;
@@ -269,22 +272,24 @@ router.post('/tickets/:id/worker-completion',
         [req.params.id, req.svcUser.id]);
       if (!assigned.length) return res.status(403).json({ error: 'You are not assigned to this ticket' });
 
-      const reportPath = req.file ? `/uploads/${req.file.filename}` : null;
+      const reportPath      = req.files?.report?.[0]      ? `/uploads/${req.files.report[0].filename}`       : null;
+      const expenseFilePath = req.files?.expense_file?.[0] ? `/uploads/${req.files.expense_file[0].filename}` : null;
 
       // Upsert this worker's billing row: set expense + completion report + completed timestamp.
       // charged_amount stays whatever it was (likely NULL — admin fills it later).
       const { rows } = await pool.query(
         `INSERT INTO ticket_worker_billing
-           (ticket_id, worker_id, expense_amount, expense_note, completion_report_path, completed_by_worker_at)
-         VALUES ($1::uuid, $2::uuid, $3::numeric, $4, $5, NOW())
+           (ticket_id, worker_id, expense_amount, expense_note, completion_report_path, expense_file_path, completed_by_worker_at)
+         VALUES ($1::uuid, $2::uuid, $3::numeric, $4, $5, $6, NOW())
          ON CONFLICT (ticket_id, worker_id)
          DO UPDATE SET
            expense_amount         = EXCLUDED.expense_amount,
            expense_note           = EXCLUDED.expense_note,
            completion_report_path = COALESCE(EXCLUDED.completion_report_path, ticket_worker_billing.completion_report_path),
+           expense_file_path      = COALESCE(EXCLUDED.expense_file_path, ticket_worker_billing.expense_file_path),
            completed_by_worker_at = NOW()
          RETURNING *`,
-        [req.params.id, req.svcUser.id, expense, expense_note, reportPath]);
+        [req.params.id, req.svcUser.id, expense, expense_note, reportPath, expenseFilePath]);
 
       // Notify admin/superadmin that this worker finished and a charge is now needed.
       req.io?.to('admins').emit('worker:completed', {

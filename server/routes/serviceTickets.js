@@ -1202,15 +1202,15 @@ router.post('/:id/notes', svcAuth(), async (req, res) => {
 
 
 
-// Example signature: router.post('/:id/worker-completion', svcAuth(['plc','wireman']), upload.single('report'), async (req, res) => { ... })
-router.post('/:id/worker-completion', svcAuth(['plc','wireman']), upload.single('report'), async (req, res) => {
+// Example signature: router.post('/:id/worker-completion', svcAuth(['plc','wireman']), upload.fields([{ name: 'report', maxCount: 1 }, { name: 'expense_file', maxCount: 1 }]), async (req, res) => { ... })
+router.post('/:id/worker-completion', svcAuth(['plc','wireman']), upload.fields([{ name: 'report', maxCount: 1 }, { name: 'expense_file', maxCount: 1 }]), async (req, res) => {
   try {
     const ticketId = req.params.id;
     const workerId = req.svcUser.id;
     const expense  = req.body.expense_amount != null ? Number(req.body.expense_amount) : 0;
     const note     = req.body.expense_note?.toString().trim() || null;
  
-    if (!req.file)               return res.status(400).json({ error: 'Completion report file is required' });
+    if (!req.files?.report?.[0])  return res.status(400).json({ error: 'Completion report file is required' });
     if (isNaN(expense) || expense < 0) return res.status(400).json({ error: 'Invalid expense amount' });
  
     // 1) Confirm assignment + fetch ticket + creator
@@ -1229,7 +1229,8 @@ router.post('/:id/worker-completion', svcAuth(['plc','wireman']), upload.single(
       return res.status(400).json({ error: `Cannot submit report from status "${ticket.status}"` });
     }
  
-    const reportPath = `/uploads/${req.file.filename}`;
+    const reportPath      = `/uploads/${req.files.report[0].filename}`;
+    const expenseFilePath = req.files?.expense_file?.[0] ? `/uploads/${req.files.expense_file[0].filename}` : null;
  
     // 2) Upsert this worker's billing row with expense + report
     await pool.query(

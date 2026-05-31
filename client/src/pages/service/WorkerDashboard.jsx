@@ -378,7 +378,13 @@ function TaskDocuments({ ticketId }) {
   useEffect(() => { load(); }, [load]);
 
   // Resolve relative /uploads/... paths to the server origin
-  const fullUrl = (u) => u?.startsWith('http') ? u : `${window.location.protocol}//${window.location.hostname}:5001${u}`;
+  const fullUrl = (u) => {
+    if (!u) return '#';
+    if (u.startsWith('http')) return u;
+    const isDev = window.location.hostname === 'localhost';
+    const base = isDev ? 'http://localhost:5001' : `${window.location.protocol}//${window.location.hostname}`;
+    return `${base}${u}`;
+  };
 
   const upload = async (files) => {
     if (!files?.length) return;
@@ -626,7 +632,13 @@ function CompleteFlow({ tk, svcUser, busy, onComplete }) {
   }
 
   // Already submitted report: show submitted state + file links + complete button
-  const fullUrl = (u) => u?.startsWith('http') ? u : `${window.location.protocol}//${window.location.hostname}:5001${u}`;
+  const fullUrl = (u) => {
+    if (!u) return '#';
+    if (u.startsWith('http')) return u;
+    const isDev = window.location.hostname === 'localhost';
+    const base = isDev ? 'http://localhost:5001' : `${window.location.protocol}//${window.location.hostname}`;
+    return `${base}${u}`;
+  };
   if (hasCompleted) {
     return (
       <div className="ml-auto flex flex-col items-end gap-2">

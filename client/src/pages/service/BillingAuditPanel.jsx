@@ -21,7 +21,13 @@ export default function BillingAuditPanel({ ticketId, isWarranty, isPrivileged }
   const [refreshKey, setRefreshKey] = useState(0);
 
   // Resolve the report file URL to the file server (same convention as TaskDocuments)
-  const fullUrl = (u) => !u ? '' : (u.startsWith('http') ? u : `${window.location.protocol}//${window.location.hostname}:5001${u}`);
+  const fullUrl = (u) => {
+    if (!u) return '#';
+    if (u.startsWith('http')) return u;
+    const isDev = window.location.hostname === 'localhost';
+    const base = isDev ? 'http://localhost:5001' : `${window.location.protocol}//${window.location.hostname}`;
+    return `${base}${u}`;
+  };
 
   useEffect(() => {
     let cancelled = false;

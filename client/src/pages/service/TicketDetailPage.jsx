@@ -738,7 +738,15 @@ function WorkerBillingSummary({ svcUserId, billing }) {
   if (!mine) return null;
   const hasReport  = !!(mine.completion_report_path || mine.report_url);
   const hasCharged = mine.charged_amount != null;
-  const fullUrl = (u) => !u ? '#' : u.startsWith('http') ? u : `${window.location.protocol}//${window.location.hostname}:5001${u}`;
+  const fullUrl = (u) => {
+    if (!u) return '#';
+    if (u.startsWith('http')) return u;
+    const isDev = window.location.hostname === 'localhost';
+    const base = isDev
+      ? `http://localhost:5001`
+      : `${window.location.protocol}//${window.location.hostname}`;
+    return `${base}${u}`;
+  };
   return (
     <section className="bg-white rounded-3xl border border-slate-200/60 p-4">
       <p className="text-xs font-black text-slate-700 mb-2">Your billing on this ticket</p>

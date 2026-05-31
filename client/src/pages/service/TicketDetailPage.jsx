@@ -252,28 +252,64 @@ function WorkerActions({ ticket, billing, onAnyChange }) {
 
 /* ─── Completion modal (expense + report) — portaled ─── */
 function CompletionModal({ ticket, onClose, onSuccess }) {
-  const [expense, setExpense] = useState('');
-  const [note, setNote]       = useState('');
-  const [file, setFile]       = useState(null);
-  const [saving, setSaving]   = useState(false);
-  const fileRef = useRef(null);
+  const [expense,      setExpense]      = useState('');
+  const [note,         setNote]         = useState('');
+  const [reportFile,   setReportFile]   = useState(null);   // completion report — always required
+  const [expenseFile,  setExpenseFile]  = useState(null);   // expense proof — required only if expense > 0
+  const [saving,       setSaving]       = useState(false);
+  const reportRef  = useRef(null);
+  const expenseRef = useRef(null);
 
-  const numericExpense = expense === '' ? 0 : Number(expense);
-  const valid = !isNaN(numericExpense) && numericExpense >= 0 && !!file;
+  const numericExpense  = expense === '' ? 0 : Number(expense);
+  const hasExpense      = !isNaN(numericExpense) && numericExpense > 0;
+
+  // Valid when:
+  // 1. completion report is attached (always required)
+  // 2. if expense > 0, expense proof file must also be attached
+  const valid = !!reportFile && (!hasExpense || !!expenseFile);
 
   const save = async () => {
-    if (!file) { alert('Please attach a completion report file.'); return; }
+    if (!reportFile) { alert('Please attach a completion report.'); return; }
+    if (hasExpense && !expenseFile) { alert('Please attach an expense proof file.'); return; }
     setSaving(true);
     try {
       const fd = new FormData();
-      fd.append('report', file);
-      fd.append('expense_amount', String(numericExpense));
-      if (note) fd.append('expense_note', note);
-      await svcApi.post(`/tickets/${ticket.id}/worker-completion`, fd, { headers:{'Content-Type':'multipart/form-data'} });
+      fd.append('report',         reportFile);
+      fd.append('expense_amount', String(isNaN(numericExpense) ? 0 : numericExpense));
+      if (note)        fd.append('expense_note', note);
+      if (expenseFile) fd.append('expense_file', expenseFile);
+      await svcApi.post(`/tickets/${ticket.id}/worker-completion`, fd, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
       onSuccess?.();
     } catch (e) { alert(e.response?.data?.error || 'Failed'); }
     finally { setSaving(false); }
   };
+
+  const FileBox = ({ label, file, onAttach, onRemove, inputRef, required, accept }) => (
+    <div>
+      <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
+        {label} {required && <span className="text-red-500">*</span>}
+      </label>
+      <input ref={inputRef} type="file" accept={accept} className="hidden"
+        onChange={e => onAttach(e.target.files?.[0] || null)}/>
+      {!file ? (
+        <button type="button" onClick={() => inputRef.current?.click()}
+          className="w-full border-2 border-dashed border-slate-300 rounded-2xl p-4 text-center hover:border-blue-400 hover:bg-blue-50/40 transition-all">
+          <p className="text-xs font-bold text-slate-700">Tap to attach</p>
+          <p className="text-[10px] text-slate-400 mt-0.5">Photo · PDF · Doc</p>
+        </button>
+      ) : (
+        <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-3">
+          <svg className="w-4 h-4 text-emerald-600 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+          <p className="text-xs font-black text-emerald-700 truncate flex-1">{file.name}</p>
+          <span className="text-[10px] text-emerald-600">{(file.size/1024).toFixed(0)}KB</span>
+          <button onClick={() => { onRemove(); if(inputRef.current) inputRef.current.value=''; }}
+            className="w-6 h-6 rounded-full bg-white border border-red-200 text-red-500 text-xs flex items-center justify-center flex-shrink-0">✕</button>
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <Portal>
@@ -281,6 +317,8 @@ function CompletionModal({ ticket, onClose, onSuccess }) {
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={onClose}/>
         <div className="relative min-h-full flex items-end sm:items-center justify-center p-4 pointer-events-none">
           <div className="relative bg-white rounded-[28px] w-full max-w-md shadow-2xl overflow-hidden max-h-[90vh] flex flex-col pointer-events-auto">
+
+            {/* Header */}
             <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between flex-shrink-0">
               <div className="flex items-center gap-3 min-w-0">
                 <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-xl shadow-md flex-shrink-0">📋</div>
@@ -289,57 +327,94 @@ function CompletionModal({ ticket, onClose, onSuccess }) {
                   <p className="text-[11px] text-slate-400">Expense + completion report</p>
                 </div>
               </div>
-              <button onClick={onClose} className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center">✕</button>
+              <button onClick={onClose} className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200">✕</button>
             </div>
 
-            <div className="px-6 py-5 space-y-4 overflow-y-auto">
+            {/* Body */}
+            <div className="px-6 py-5 space-y-5 overflow-y-auto">
+
+              {/* Ticket info */}
               <div className="flex items-center gap-2 bg-blue-50 border border-blue-100 rounded-2xl px-4 py-3">
                 <span className="font-mono text-[10px] font-black bg-blue-100 text-blue-700 px-2 py-0.5 rounded">{ticket.ticket_id}</span>
                 <span className="text-xs font-bold text-slate-700 truncate flex-1">{ticket.customer_name}</span>
               </div>
 
+              {/* Expense amount */}
               <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">Your Expense (₹)</label>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
+                  Your Expense (₹) <span className="text-slate-400 font-normal normal-case">— 0 if none</span>
+                </label>
                 <div className="relative">
                   <span className="absolute left-4 top-1/2 -translate-y-1/2 text-2xl font-black text-slate-400 pointer-events-none">₹</span>
-                  <input type="number" min="0" step="1" value={expense} onChange={e=>setExpense(e.target.value)} placeholder="0" autoFocus inputMode="numeric"
+                  <input type="number" min="0" step="1" value={expense}
+                    onChange={e => { setExpense(e.target.value); if (!e.target.value || Number(e.target.value) === 0) setExpenseFile(null); }}
+                    placeholder="0" autoFocus inputMode="numeric"
                     className="w-full pl-12 pr-4 py-4 bg-slate-50 border-2 border-slate-200 rounded-2xl text-2xl font-black outline-none focus:border-blue-400 focus:bg-white"/>
                 </div>
-                <p className="text-[10px] text-slate-400 mt-1.5">Travel, parts, or other costs you incurred. 0 if none.</p>
               </div>
 
+              {/* Expense note */}
               <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">Note (optional)</label>
-                <textarea rows={2} value={note} onChange={e=>setNote(e.target.value)}
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">Expense Note (optional)</label>
+                <textarea rows={2} value={note} onChange={e => setNote(e.target.value)}
                   placeholder="e.g. Auto fare ₹200, relay ₹150"
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm outline-none focus:border-slate-400 focus:bg-white resize-none"/>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">Completion Report *</label>
-                <input ref={fileRef} type="file" accept="image/*,application/pdf,.doc,.docx" className="hidden" onChange={e=>setFile(e.target.files?.[0]||null)}/>
-                {!file ? (
-                  <button type="button" onClick={()=>fileRef.current?.click()}
-                    className="w-full border-2 border-dashed border-slate-300 rounded-2xl p-5 text-center hover:border-blue-400 hover:bg-blue-50/40">
-                    <p className="text-xs font-bold text-slate-700">Tap to attach report</p>
-                    <p className="text-[10px] text-slate-400 mt-0.5">Photo · PDF · Doc</p>
-                  </button>
-                ) : (
-                  <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-3">
-                    <p className="text-xs font-black text-emerald-700 truncate flex-1">{file.name}</p>
-                    <button onClick={()=>{setFile(null); if(fileRef.current) fileRef.current.value='';}} className="w-7 h-7 rounded-full bg-white border border-red-200 text-red-500 text-xs">✕</button>
+              {/* Expense file — only shown when expense > 0 */}
+              {hasExpense && (
+                <div className="border-2 border-amber-200 bg-amber-50/50 rounded-2xl p-4 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">🧾</span>
+                    <p className="text-xs font-black text-amber-700">Expense of ₹{numericExpense.toLocaleString('en-IN')} requires proof</p>
                   </div>
-                )}
-              </div>
+                  <FileBox
+                    label="Expense Proof"
+                    file={expenseFile}
+                    onAttach={setExpenseFile}
+                    onRemove={() => setExpenseFile(null)}
+                    inputRef={expenseRef}
+                    required={true}
+                    accept="image/*,application/pdf,.doc,.docx"
+                  />
+                </div>
+              )}
+
+              {/* Completion report — always required */}
+              <FileBox
+                label="Completion Report"
+                file={reportFile}
+                onAttach={setReportFile}
+                onRemove={() => setReportFile(null)}
+                inputRef={reportRef}
+                required={true}
+                accept="image/*,application/pdf,.doc,.docx"
+              />
+
+              {/* Validation hint */}
+              {!valid && (
+                <div className="bg-red-50 border border-red-100 rounded-xl px-3 py-2">
+                  <p className="text-[11px] text-red-600 font-medium">
+                    {!reportFile
+                      ? '📋 Completion report is required'
+                      : hasExpense && !expenseFile
+                      ? '🧾 Expense proof required when expense > ₹0'
+                      : ''}
+                  </p>
+                </div>
+              )}
             </div>
 
+            {/* Footer */}
             <div className="flex gap-2 px-6 py-4 border-t border-slate-100 flex-shrink-0">
-              <button onClick={onClose} disabled={saving} className="flex-1 py-3 border border-slate-200 text-slate-600 font-semibold text-sm rounded-2xl disabled:opacity-60">Cancel</button>
-              <button onClick={save} disabled={saving||!valid}
+              <button onClick={onClose} disabled={saving}
+                className="flex-1 py-3 border border-slate-200 text-slate-600 font-semibold text-sm rounded-2xl disabled:opacity-60">Cancel</button>
+              <button onClick={save} disabled={saving || !valid}
                 className="flex-1 py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm rounded-2xl disabled:opacity-40">
                 {saving ? 'Submitting…' : 'Submit & Complete →'}
               </button>
             </div>
+
           </div>
         </div>
       </div>

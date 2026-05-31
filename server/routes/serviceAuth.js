@@ -31,8 +31,9 @@ router.post('/login', async (req, res) => {
 // GET /api/service/auth/workers
 router.get('/workers', svcAuth(['admin','superadmin']), async (_req, res) => {
   try {
+    // `SELECT id, name, role, department, phone FROM service_users WHERE is_active=TRUE ORDER BY role, name`
     const { rows } = await pool.query(
-      `SELECT id, name, role, department, phone FROM service_users WHERE is_active=TRUE ORDER BY role, name`
+      `SELECT id, name, role, department, phone FROM service_users WHERE is_active=TRUE AND role IN ('plc','wireman','heads') ORDER BY role, name`
     );
     res.json(rows);
   } catch (e) { res.status(500).json({ error: e.message }); }

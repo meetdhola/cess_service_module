@@ -19,7 +19,7 @@ const pool    = require('../db/pool');
 const svcAuth = require('../middleware/serviceAuth');
 
 // Same uploads dir / disk storage pattern as serviceTickets.js
-const UPLOAD_DIR = path.join(__dirname, '../../uploads');
+const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, '../uploads');
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),

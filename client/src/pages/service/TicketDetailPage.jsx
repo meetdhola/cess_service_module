@@ -742,9 +742,7 @@ function WorkerBillingSummary({ svcUserId, billing }) {
     if (!u) return '#';
     if (u.startsWith('http')) return u;
     const isDev = window.location.hostname === 'localhost';
-    const base = isDev
-      ? `http://localhost:5001`
-      : `${window.location.protocol}//${window.location.hostname}`;
+    const base =`${window.location.protocol}//${window.location.hostname}`;
     return `${base}${u}`;
   };
   return (

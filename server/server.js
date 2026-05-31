@@ -16,7 +16,7 @@ const SECRET = process.env.JWT_SECRET || 'cess_secret_2526';
 
 app.use(cors());
 app.use(express.json());
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Attach io to every request so routes can emit
 app.use((req, _res, next) => { req.io = io; next(); });

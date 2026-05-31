@@ -54,6 +54,7 @@ export default function App() {
             <Route path="/service/admin/tickets/:ticketId"
                                                  element={<SvcPrivate roles={['admin','superadmin']}><TicketDetailPage /></SvcPrivate>}/>
 
+            <Route path="/uploads/*" element={null} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </BrowserRouter>
@@ -110,7 +111,8 @@ export default function App() {
 //             <Route path="/" element={<SvcPublic><ServiceLogin /></SvcPublic>} />
 //             <Route path="/service/worker" element={<SvcPrivate roles={['plc','wireman']}><WorkerDashboard /></SvcPrivate>}/>
 //             <Route path="/service/admin"  element={<SvcPrivate roles={['admin','superadmin']}><AdminDashboard /></SvcPrivate>}/>
-//             <Route path="*" element={<Navigate to="/" replace />} />
+//             <Route path="/uploads/*" element={null} />
+            <Route path="*" element={<Navigate to="/" replace />} />
 //           </Routes>
 //         </BrowserRouter>
 //       </SvcAuthProvider>

@@ -762,14 +762,16 @@ function WorkerBillingSummary({ svcUserId, billing }) {
         )}
         {/* File links */}
         {(mine.completion_report_path || mine.report_url) && (
-          <a href={fullUrl(mine.report_url || mine.completion_report_path)} target="_blank" rel="noopener noreferrer"
+          <a onClick={(e)=>{e.preventDefault();window.open(fullUrl(mine.report_url||mine.completion_report_path),"_blank");}}
+             href={fullUrl(mine.report_url || mine.completion_report_path)} target="_blank" rel="noopener noreferrer"
              className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-700 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-full">
             <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
             View report
           </a>
         )}
         {mine.expense_file_url && (
-          <a href={fullUrl(mine.expense_file_url)} target="_blank" rel="noopener noreferrer"
+          <a onClick={(e)=>{e.preventDefault();window.open(fullUrl(mine.expense_file_url),"_blank");}}
+             href={fullUrl(mine.expense_file_url)} target="_blank" rel="noopener noreferrer"
              className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600 hover:text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full">
             <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
             View expense proof

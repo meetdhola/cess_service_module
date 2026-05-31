@@ -1524,9 +1524,10 @@ useEffect(() => {
 
   // const plcW  = workers.filter(w=>w.role==='plc');
   // const wireW = workers.filter(w=>w.role==='wireman');
-  const plcW  = workers.filter(w => w.role === 'plc' || (w.role === 'heads' && w.department === 'PLC'));
-const wireW = workers.filter(w => w.role === 'wireman' || (w.role === 'heads' && w.department === 'Wireman'));
-
+//   const plcW  = workers.filter(w => w.role === 'plc' || (w.role === 'heads' && w.department === 'PLC'));
+// const wireW = workers.filter(w => w.role === 'wireman' || (w.role === 'heads' && w.department === 'Wireman'));
+const plcW  = workers.filter(w => w.role === 'plc' || (w.role === 'admin' && w.department === 'PLC'));
+const wireW = workers.filter(w => w.role === 'wireman' || (w.role === 'admin' && w.department === 'Wireman'));
   const openAssign = tk => {
     if (TERMINAL.includes(tk.status)) { alert('Cannot assign a completed/closed ticket.'); return; }
     setAssignM(tk);

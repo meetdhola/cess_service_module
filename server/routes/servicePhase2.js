@@ -249,8 +249,8 @@ router.post('/tickets/:id/notes', svcAuth(), async (req, res) => {
 router.post('/tickets/:id/worker-completion',
   svcAuth(['plc','wireman']),
   upload.fields([
-    { name: 'report',       maxCount: 1 },
-    { name: 'expense_file', maxCount: 1 },
+    { name: 'report',       maxCount: 10 },
+    { name: 'expense_file', maxCount: 10 },
   ]),
   async (req, res) => {
     const expenseRaw = req.body.expense_amount;
@@ -272,8 +272,10 @@ router.post('/tickets/:id/worker-completion',
         [req.params.id, req.svcUser.id]);
       if (!assigned.length) return res.status(403).json({ error: 'You are not assigned to this ticket' });
 
-      const reportPath      = req.files?.report?.[0]      ? `/uploads/${req.files.report[0].filename}`       : null;
-      const expenseFilePath = req.files?.expense_file?.[0] ? `/uploads/${req.files.expense_file[0].filename}` : null;
+      const reportFiles  = req.files?.report       || [];
+      const expenseFiles = req.files?.expense_file || [];
+      const reportPath      = reportFiles[0]  ? `/uploads/${reportFiles[0].filename}`  : null;
+      const expenseFilePath = expenseFiles[0] ? `/uploads/${expenseFiles[0].filename}` : null;
 
       // Upsert this worker's billing row: set expense + completion report + completed timestamp.
       // charged_amount stays whatever it was (likely NULL — admin fills it later).
@@ -291,6 +293,17 @@ router.post('/tickets/:id/worker-completion',
          RETURNING *`,
         [req.params.id, req.svcUser.id, expense, expense_note, reportPath, expenseFilePath]);
 
+      // Save extra files beyond first to ticket_worker_files
+      for (const f of reportFiles.slice(1)) {
+        await pool.query(
+          `INSERT INTO ticket_worker_files (ticket_id, worker_id, file_type, file_path, original_name, file_size) VALUES ($1,$2,'report',$3,$4,$5)`,
+          [req.params.id, req.svcUser.id, `/uploads/${f.filename}`, f.originalname, f.size]);
+      }
+      for (const f of expenseFiles.slice(1)) {
+        await pool.query(
+          `INSERT INTO ticket_worker_files (ticket_id, worker_id, file_type, file_path, original_name, file_size, expense_amount) VALUES ($1,$2,'expense',$3,$4,$5,$6)`,
+          [req.params.id, req.svcUser.id, `/uploads/${f.filename}`, f.originalname, f.size, expense]);
+      }
       // Notify admin/superadmin that this worker finished and a charge is now needed.
       req.io?.to('admins').emit('worker:completed', {
         ticket_id:   req.params.id,

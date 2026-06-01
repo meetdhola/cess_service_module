@@ -1655,7 +1655,7 @@ const wireW = workers.filter(w => w.role === 'wireman' || (w.role === 'admin' &&
     {k:'tickets',  icon:I.ticket,   label:'Tickets', badge:counts.unassigned||null},
     {k:'tasks', icon:I.tasks || I.ticket, label:'Tasks'},
     {k:'workers',  icon:I.workers,  label:'Workers'},
-    ...((isSuperAdmin||isSales)?[
+    ...((isSuperAdmin)?[
       {k:'reports',       icon:I.reports,  label:'Reports'},
       {k:'profitability', icon:I.profit,   label:'Profitability'},
     ]:[]),
@@ -1996,7 +1996,7 @@ const wireW = workers.filter(w => w.role === 'wireman' || (w.role === 'admin' &&
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs">
   <thead className="bg-slate-50/50 border-b border-slate-100">
-    <tr>{['Worker','Role','Department','Phone','Salary/mo','IRC/day','Status'].map(h=><th key={h} className="text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider px-4 py-3">{h}</th>)}</tr>
+    <tr>{[...['Worker','Role','Department','Phone'], ...(isSuperAdmin?['Salary/mo']:[]), ...(isSuperAdmin||isSales?['IRC/day']:[]), 'Status'].map(h=><th key={h} className="text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider px-4 py-3">{h}</th>)}</tr>
   </thead>
   <tbody className="divide-y divide-slate-100">
     {workers.length===0 ? (
@@ -2033,8 +2033,8 @@ const wireW = workers.filter(w => w.role === 'wireman' || (w.role === 'admin' &&
           </td>
           <td className="px-4 py-3 text-slate-600">{w.department||'—'}</td>
           <td className="px-4 py-3 text-slate-600 font-mono">{w.phone}</td>
-          <td className="px-4 py-3 text-slate-600 font-mono text-xs">{w.monthly_salary?`₹${Number(w.monthly_salary).toLocaleString('en-IN')}`:'—'}</td>
-          <td className="px-4 py-3 text-slate-600 font-mono text-xs">{w.irc_daily_rate?`₹${Number(w.irc_daily_rate).toLocaleString('en-IN')}`:'—'}</td>
+          {isSuperAdmin && <td className="px-4 py-3 text-slate-600 font-mono text-xs">{w.monthly_salary?`₹${Number(w.monthly_salary).toLocaleString('en-IN')}`:'—'}</td>}
+          {(isSuperAdmin||isSales) && <td className="px-4 py-3 text-slate-600 font-mono text-xs">{w.irc_daily_rate?`₹${Number(w.irc_daily_rate).toLocaleString('en-IN')}`:'—'}</td>}
           <td className="px-4 py-3">
             <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-emerald-700">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"/>

@@ -29,11 +29,17 @@ router.post('/login', async (req, res) => {
 });
 
 // GET /api/service/auth/workers
-router.get('/workers', svcAuth(['admin','superadmin']), async (_req, res) => {
+router.get('/workers', svcAuth(['admin','superadmin']), async (req, res) => {
   try {
-    // `SELECT id, name, role, department, phone FROM service_users WHERE is_active=TRUE ORDER BY role, name`
+    const isSuperAdmin = req.svcUser?.role === 'superadmin';
+    const isSales      = req.svcUser?.role === 'admin' && (req.svcUser?.department||'').toLowerCase().includes('sales');
+    const fields = isSuperAdmin
+      ? 'id, name, role, department, phone, monthly_salary, irc_daily_rate, seniority, is_active'
+      : isSales
+      ? 'id, name, role, department, phone, irc_daily_rate, seniority, is_active'
+      : 'id, name, role, department, phone, seniority, is_active';
     const { rows } = await pool.query(
-      `SELECT id, name, role, department, phone, monthly_salary, irc_daily_rate, seniority FROM service_users WHERE is_active=TRUE AND (role IN ('plc','wireman') OR (role='admin' AND department IN ('PLC','Wireman','Design'))) ORDER BY role, name`
+      `SELECT ${fields} FROM service_users WHERE is_active=TRUE AND (role IN ('plc','wireman') OR role IN ('admin','superadmin')) ORDER BY role, name`
     );
     res.json(rows);
   } catch (e) { res.status(500).json({ error: e.message }); }

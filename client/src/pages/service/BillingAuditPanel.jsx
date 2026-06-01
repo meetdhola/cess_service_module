@@ -13,7 +13,8 @@ import svcApi from '../../serviceApi';
 
 export default function BillingAuditPanel({ ticketId, isWarranty, isPrivileged }) {
   const [data, setData]             = useState(null);
-  const [suggest, setSuggest]       = useState(null);   // { workers: [{worker_id, suggested_amount, basis, expense_amount, report_url, ...}] }
+  const [suggest, setSuggest]       = useState(null);
+  const [workerFiles, setWorkerFiles] = useState({});   // { workers: [{worker_id, suggested_amount, basis, expense_amount, report_url, ...}] }
   const [editing, setEditing]       = useState(null);
   const [editAmount, setEditAmount] = useState('');
   const [editNote, setEditNote]     = useState('');
@@ -35,8 +36,22 @@ export default function BillingAuditPanel({ ticketId, isWarranty, isPrivileged }
       svcApi.get(`/tickets/${ticketId}/billing-status`),
       isWarranty ? Promise.resolve({ data: null })
                  : svcApi.get(`/tickets/${ticketId}/rate-suggestion`).catch(() => ({ data: null })),
+      svcApi.get(`/tickets/${ticketId}/worker-files`).catch(() => ({ data: [] })),
     ])
-    .then(([b, s]) => { if (!cancelled) { setData(b.data); setSuggest(s.data); } })
+    .then(([b, s, wf]) => {
+      if (!cancelled) {
+        setData(b.data);
+        setSuggest(s.data);
+        // Group extra files by worker_id
+        const extraByWorker = {};
+        for (const f of (wf.data || [])) {
+          if (!extraByWorker[f.worker_id]) extraByWorker[f.worker_id] = { reports: [], expenses: [] };
+          if (f.file_type === 'report')  extraByWorker[f.worker_id].reports.push(f);
+          if (f.file_type === 'expense') extraByWorker[f.worker_id].expenses.push(f);
+        }
+        setWorkerFiles(extraByWorker);
+      }
+    })
     .catch(e => console.error(e));
     return () => { cancelled = true; };
   }, [ticketId, refreshKey, isWarranty]);
@@ -149,22 +164,28 @@ export default function BillingAuditPanel({ ticketId, isWarranty, isPrivileged }
                       {sg.expense_note && <span className="text-slate-500 italic font-normal">"{sg.expense_note}"</span>}
                     </span>
                   )}
-                  {sg.report_url && (
-                    <a onClick={(e)=>{e.preventDefault();window.open(fullUrl(sg.report_url),"_blank");}}
-                       href={fullUrl(sg.report_url)} target="_blank" rel="noopener noreferrer"
-                       className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 font-bold">
+                  {/* All report files: primary + extras from ticket_worker_files */}
+                  {[...(sg.report_url?[{url:sg.report_url}]:[]),
+                    ...(workerFiles[w.worker_id]?.reports||[]).map(f=>({url:f.file_path}))
+                  ].map((f,i)=>(
+                    <a key={i} onClick={(e)=>{e.preventDefault();window.open(fullUrl(f.url),"_blank");}}
+                       href={fullUrl(f.url)} target="_blank" rel="noopener noreferrer"
+                       className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 font-bold text-[11px] bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full">
                       <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                      View completion report
+                      Report{i>0?` ${i+1}`:''}
                     </a>
-                  )}
-                  {sg.expense_file_url && (
-                    <a onClick={(e)=>{e.preventDefault();window.open(fullUrl(sg.expense_file_url),"_blank");}}
-                       href={fullUrl(sg.expense_file_url)} target="_blank" rel="noopener noreferrer"
-                       className="inline-flex items-center gap-1 text-amber-600 hover:text-amber-700 font-bold">
+                  ))}
+                  {/* All expense files: primary + extras */}
+                  {[...(sg.expense_file_url?[{url:sg.expense_file_url}]:[]),
+                    ...(workerFiles[w.worker_id]?.expenses||[]).map(f=>({url:f.file_path}))
+                  ].map((f,i)=>(
+                    <a key={i} onClick={(e)=>{e.preventDefault();window.open(fullUrl(f.url),"_blank");}}
+                       href={fullUrl(f.url)} target="_blank" rel="noopener noreferrer"
+                       className="inline-flex items-center gap-1 text-amber-600 hover:text-amber-700 font-bold text-[11px] bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
                       <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                      View expense proof
+                      Expense{i>0?` ${i+1}`:' proof'}
                     </a>
-                  )}
+                  ))}
                 </div>
               )}
 

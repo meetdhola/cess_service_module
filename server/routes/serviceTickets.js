@@ -804,4 +804,127 @@ router.post('/:id/self-assign', svcAuth(['plc','wireman']), async (req, res) => 
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+
+/* ─── GET /:id/rate-suggestion ─── */
+/* Returns per-worker rate card suggestion + expense/report info  */
+router.get('/:id/rate-suggestion', svcAuth(['admin','superadmin']), async (req, res) => {
+  try {
+    // Resolve UUID or human ticket number
+    const idParam = req.params.id;
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idParam);
+    const lookup = isUUID
+      ? await pool.query('SELECT id FROM service_tickets WHERE id=$1::uuid', [idParam])
+      : await pool.query('SELECT id FROM service_tickets WHERE ticket_id=$1', [idParam]);
+    if (!lookup.rows.length) return res.status(404).json({ error: 'Ticket not found' });
+    const id = lookup.rows[0].id;
+
+    // Ticket billing fields
+    const { rows: tk } = await pool.query(
+      `SELECT id, ticket_id, customer_grade, billing_location, billing_mode,
+              override_rate, warranty_status
+         FROM service_tickets WHERE id=$1`, [id]);
+    if (!tk.length) return res.status(404).json({ error: 'Ticket not found' });
+    const ticket = tk[0];
+
+    // Pricing rows
+    const { rows: pricingRows } = await pool.query(
+      `SELECT * FROM service_pricing WHERE active=TRUE`);
+
+    // Assigned workers + hours + billing info
+    const { rows: workers } = await pool.query(
+      `WITH assigned AS (
+         SELECT worker_id, MIN(role) AS assigned_role
+           FROM ticket_assignments WHERE ticket_id=$1 GROUP BY worker_id
+       )
+       SELECT su.id AS worker_id, su.name AS worker_name, su.role AS worker_role,
+              su.seniority AS worker_seniority, a.assigned_role,
+              COALESCE((
+                SELECT SUM(CASE WHEN ws.status='running'
+                  THEN ws.total_seconds + EXTRACT(EPOCH FROM (NOW()-ws.started_at))::int
+                  ELSE ws.total_seconds END)
+                FROM work_sessions ws WHERE ws.ticket_id=$1 AND ws.worker_id=su.id
+              ), 0) AS total_seconds,
+              twb.charged_amount, twb.charged_note,
+              twb.expense_amount, twb.expense_note,
+              twb.completion_report_path, twb.expense_file_path, twb.completed_by_worker_at
+         FROM assigned a
+         JOIN service_users su ON su.id=a.worker_id
+         LEFT JOIN ticket_worker_billing twb ON twb.ticket_id=$1 AND twb.worker_id=su.id
+        ORDER BY su.name`, [id]);
+
+    const isWarranty = ticket.warranty_status === 'in_warranty';
+
+    // Inline pricing helpers
+    function pickPricing(worker, ticket, rows) {
+      const serviceType = worker.role === 'wireman' ? 'wireman' : 'programmer';
+      const location    = ticket.billing_location || 'within_ahmedabad';
+      const seniority   = worker.seniority || 'junior';
+      let row = rows.find(p =>
+        p.service_type === serviceType && p.location === location &&
+        (p.seniority === seniority || p.seniority === 'any'));
+      if (!row) row = rows.find(p => p.service_type === serviceType && p.location === location);
+      return row || null;
+    }
+
+    function computeRevenue(ticket, pricing, hours) {
+      if (ticket.override_rate) return Number(ticket.override_rate);
+      if (!pricing) return 0;
+      if (ticket.billing_mode === 'grade_rate') {
+        const grade = (ticket.customer_grade || 'B').toLowerCase();
+        return Number(pricing['grade_' + grade + '_rate'] || 0);
+      }
+      if (ticket.billing_mode === 'half_day') return Number(pricing.half_day_rate || 0);
+      if (hours > 0 && hours <= 4) return Number(pricing.half_day_rate || pricing.per_day_rate * 0.6 || 0);
+      return Number(pricing.per_day_rate || 0);
+    }
+
+    const toUrl = (p) => !p ? null : p.startsWith('/uploads') ? p : '/uploads/' + p;
+
+    const result = workers.map(w => {
+      const hours   = (Number(w.total_seconds) || 0) / 3600;
+      const pricing = pickPricing(
+        { role: w.assigned_role || w.worker_role, seniority: w.worker_seniority },
+        ticket, pricingRows);
+      const suggested = isWarranty ? 0 : computeRevenue(ticket, pricing, hours);
+
+      let basis;
+      if (isWarranty)                                    basis = 'Warranty — no charge';
+      else if (ticket.override_rate)                     basis = 'Override rate';
+      else if (ticket.billing_mode === 'half_day')       basis = 'Half-day rate';
+      else if (ticket.billing_mode === 'grade_rate')     basis = 'Grade ' + String(ticket.customer_grade||'B').toUpperCase() + ' rate';
+      else if (hours > 0 && hours <= 4)                  basis = 'Auto half-day (≤4h)';
+      else                                               basis = 'Per-day rate';
+
+      // Half + full day rates for display
+      const halfDayAmount = isWarranty ? 0 : (pricing ? Math.round(Number(pricing.half_day_rate || 0)) : 0);
+      const fullDayAmount = isWarranty ? 0 : (pricing ? Math.round(Number(pricing.per_day_rate  || 0)) : 0);
+
+      return {
+        worker_id:        w.worker_id,
+        worker_name:      w.worker_name,
+        worker_role:      w.worker_role,
+        worker_seniority: w.worker_seniority,
+        assigned_role:    w.assigned_role,
+        hours:            +hours.toFixed(2),
+        suggested_amount: Math.round(suggested),
+        basis,
+        half_day_rate:    halfDayAmount,
+        full_day_rate:    fullDayAmount,
+        charged_amount:   w.charged_amount != null ? Number(w.charged_amount) : null,
+        charged_note:     w.charged_note || null,
+        expense_amount:   w.expense_amount != null ? Number(w.expense_amount) : 0,
+        expense_note:     w.expense_note || null,
+        completed_at:     w.completed_by_worker_at || null,
+        report_url:       toUrl(w.completion_report_path),
+        expense_file_url: toUrl(w.expense_file_path),
+      };
+    });
+
+    res.json({ ticket_id: id, workers: result });
+  } catch (e) {
+    console.error('Rate suggestion error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = router;

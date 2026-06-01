@@ -376,28 +376,53 @@ router.patch('/tickets/:id/reopen', svcAuth(['admin','superadmin']), async (req,
 // FULL — fetch ALL data tied to a ticket (for the reopen "suggestions" view)
 router.get('/tickets/:id/full', svcAuth(), async (req, res) => {
   try {
+    // Resolve human ticket number (e.g. SE0019) to internal UUID
+    const idParam = req.params.id;
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idParam);
+    let ticketUUID = idParam;
+    if (!isUUID) {
+      const { rows: lk } = await pool.query(
+        `SELECT id FROM service_tickets WHERE ticket_id=$1`, [idParam]);
+      if (!lk.length) return res.status(404).json({ error: 'Ticket not found' });
+      ticketUUID = lk[0].id;
+    }
+    // Worker access check
+    const role = req.svcUser?.role;
+    if (role === 'plc' || role === 'wireman') {
+      const { rows: ok } = await pool.query(
+        `SELECT 1 FROM ticket_assignments WHERE ticket_id=$1 AND worker_id=$2`,
+        [ticketUUID, req.svcUser.id]);
+      if (!ok.length) {
+        // Also allow if ticket is Open (for self-assign flow)
+        const { rows: tk } = await pool.query(
+          `SELECT status FROM service_tickets WHERE id=$1`, [ticketUUID]);
+        if (!tk.length || !['Open','Assigned'].includes(tk[0].status)) {
+          return res.status(403).json({ error: 'Not assigned to this ticket' });
+        }
+      }
+    }
     const [ticket, assignments, sessions, billing, challans, notes, media, docs] = await Promise.all([
-      pool.query(`SELECT * FROM service_tickets WHERE id=$1`, [req.params.id]),
+      pool.query(`SELECT * FROM service_tickets WHERE id=$1`, [ticketUUID]),
       pool.query(
         `SELECT ta.*, su.name AS worker_name FROM ticket_assignments ta
-           JOIN service_users su ON su.id=ta.worker_id WHERE ta.ticket_id=$1`, [req.params.id]),
+           JOIN service_users su ON su.id=ta.worker_id WHERE ta.ticket_id=$1`, [ticketUUID]),
       pool.query(
         `SELECT ws.*, su.name AS worker_name FROM work_sessions ws
            JOIN service_users su ON su.id=ws.worker_id
-          WHERE ws.ticket_id=$1 ORDER BY ws.started_at DESC`, [req.params.id]),
+          WHERE ws.ticket_id=$1 ORDER BY ws.started_at DESC`, [ticketUUID]),
       pool.query(
         `SELECT twb.*, su.name AS worker_name FROM ticket_worker_billing twb
-           JOIN service_users su ON su.id=twb.worker_id WHERE twb.ticket_id=$1`, [req.params.id]),
+           JOIN service_users su ON su.id=twb.worker_id WHERE twb.ticket_id=$1`, [ticketUUID]),
       pool.query(
         `SELECT tc.*, su.name AS added_by_name FROM ticket_challans tc
            LEFT JOIN service_users su ON su.id=tc.added_by
-          WHERE tc.ticket_id=$1 ORDER BY tc.created_at ASC`, [req.params.id]),
+          WHERE tc.ticket_id=$1 ORDER BY tc.created_at ASC`, [ticketUUID]),
       pool.query(
         `SELECT tn.*, su.name AS author_name FROM ticket_notes tn
            LEFT JOIN service_users su ON su.id=tn.author_id
-          WHERE tn.ticket_id=$1 ORDER BY tn.created_at ASC`, [req.params.id]),
-      pool.query(`SELECT * FROM ticket_media WHERE ticket_id=$1`, [req.params.id]),
-      pool.query(`SELECT * FROM ticket_documents WHERE ticket_id=$1`, [req.params.id]),
+          WHERE tn.ticket_id=$1 ORDER BY tn.created_at ASC`, [ticketUUID]),
+      pool.query(`SELECT * FROM ticket_media WHERE ticket_id=$1`, [ticketUUID]),
+      pool.query(`SELECT * FROM ticket_documents WHERE ticket_id=$1`, [ticketUUID]),
     ]);
 
     if (!ticket.rows.length) return res.status(404).json({ error: 'Ticket not found' });
@@ -422,6 +447,63 @@ router.get('/tickets/:id/full', svcAuth(), async (req, res) => {
     console.error('Ticket full fetch error:', e);
     res.status(500).json({ error: e.message });
   }
+});
+
+
+/* ════════════════════════════════════════════════════════════════
+   MULTIPLE FILES PER WORKER
+   POST /tickets/:id/worker-files  — worker uploads report or expense file
+   GET  /tickets/:id/worker-files  — get all files for this ticket
+   ════════════════════════════════════════════════════════════════ */
+router.post('/tickets/:id/worker-files',
+  svcAuth(['plc','wireman']),
+  upload.fields([
+    { name: 'files', maxCount: 10 },
+  ]),
+  async (req, res) => {
+    const { file_type, expense_amount, note } = req.body;
+    if (!file_type || !['report','expense'].includes(file_type)) {
+      return res.status(400).json({ error: 'file_type must be report or expense' });
+    }
+    const uploadedFiles = req.files?.files || [];
+    if (!uploadedFiles.length) return res.status(400).json({ error: 'No files uploaded' });
+
+    // Verify assignment
+    const { rows: assigned } = await pool.query(
+      `SELECT 1 FROM ticket_assignments WHERE ticket_id=$1 AND worker_id=$2`,
+      [req.params.id, req.svcUser.id]);
+    if (!assigned.length) return res.status(403).json({ error: 'Not assigned to this ticket' });
+
+    try {
+      const inserted = [];
+      for (const f of uploadedFiles) {
+        const { rows } = await pool.query(
+          `INSERT INTO ticket_worker_files
+             (ticket_id, worker_id, file_type, file_path, original_name, file_size, expense_amount, note)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+          [req.params.id, req.svcUser.id, file_type,
+           `/uploads/${f.filename}`, f.originalname, f.size,
+           expense_amount ? Number(expense_amount) : 0,
+           note?.toString().trim() || null]
+        );
+        inserted.push(rows[0]);
+      }
+      res.json(inserted);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  }
+);
+
+router.get('/tickets/:id/worker-files', svcAuth(), async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT twf.*, su.name AS worker_name
+         FROM ticket_worker_files twf
+         JOIN service_users su ON su.id = twf.worker_id
+        WHERE twf.ticket_id = $1
+        ORDER BY twf.uploaded_at DESC`,
+      [req.params.id]);
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 module.exports = router;

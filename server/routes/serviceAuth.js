@@ -33,7 +33,7 @@ router.get('/workers', svcAuth(['admin','superadmin']), async (_req, res) => {
   try {
     // `SELECT id, name, role, department, phone FROM service_users WHERE is_active=TRUE ORDER BY role, name`
     const { rows } = await pool.query(
-      `SELECT id, name, role, department, phone FROM service_users WHERE is_active=TRUE AND role IN ('plc','wireman','admin') ORDER BY role, name`
+      `SELECT id, name, role, department, phone, monthly_salary, irc_daily_rate, seniority FROM service_users WHERE is_active=TRUE AND (role IN ('plc','wireman') OR (role='admin' AND department IN ('PLC','Wireman','Design'))) ORDER BY role, name`
     );
     res.json(rows);
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -50,6 +50,28 @@ router.get('/all-users', svcAuth(['superadmin']), async (_req, res) => {
        FROM service_users ORDER BY role, name`
     );
     res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* PATCH /api/service/auth/users/bulk-regen-keys — superadmin only */
+router.patch('/users/bulk-regen-keys', svcAuth(['superadmin']), async (req, res) => {
+  const { confirm1, confirm2 } = req.body;
+  if (!confirm1 || !confirm2) return res.status(400).json({ error: 'Two confirmations required' });
+  if (confirm1 !== confirm2) return res.status(400).json({ error: 'Confirmations do not match' });
+  if (confirm1 !== 'RESET ALL KEYS') return res.status(400).json({ error: 'Type RESET ALL KEYS to confirm' });
+  try {
+    const { rows: users } = await pool.query(`SELECT id FROM service_users WHERE is_active = TRUE`);
+    const results = [];
+    for (const u of users) {
+      let key, dup;
+      do {
+        key = String(Math.floor(100000 + Math.random() * 900000));
+        dup = await pool.query(`SELECT id FROM service_users WHERE secret_key=$1 AND id != $2`, [key, u.id]);
+      } while (dup.rows.length);
+      await pool.query(`UPDATE service_users SET secret_key=$1 WHERE id=$2`, [key, u.id]);
+      results.push({ id: u.id, secret_key: key });
+    }
+    res.json({ message: `Reset ${results.length} keys`, users: results });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -71,6 +93,7 @@ router.patch('/users/:id/regen-key', svcAuth(['superadmin']), async (req, res) =
     res.json(rows[0]);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
+
 
 // POST /api/service/auth/users  — superadmin: add new user
 router.post('/users', svcAuth(['superadmin']), async (req, res) => {
@@ -108,5 +131,7 @@ router.patch('/users/:id', svcAuth(['superadmin']), async (req, res) => {
     res.json(rows[0]);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
+
+
 
 module.exports = router;

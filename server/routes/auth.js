@@ -38,7 +38,7 @@ router.post('/login', async (req, res) => {
       { id: user.id, name: user.name, dept: user.department,
         role: user.role, adminLevel: user.admin_level },
       SECRET,
-      { expiresIn: '12h' }
+      { expiresIn: '2d' }
     );
     res.json({ token, user: { id: user.id, name: user.name,
       department: user.department, role: user.role,

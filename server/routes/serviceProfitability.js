@@ -94,7 +94,7 @@ async function loadSessionsWithCosts(fromDate, toDate) {
   }
   // Track which sessions have already received the charged-amount allocation
   // (allocate to the first/earliest session in the period for this worker+ticket)
-  // const allocatedKeys = new Set();
+  const allocatedKeys = new Set();
    const expenseAllocatedKeys = new Set();
 
   return sessions.map(s => {

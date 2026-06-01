@@ -252,32 +252,26 @@ function WorkerActions({ ticket, billing, onAnyChange }) {
 
 /* ─── Completion modal (expense + report) — portaled ─── */
 function CompletionModal({ ticket, onClose, onSuccess }) {
-  const [expense,      setExpense]      = useState('');
-  const [note,         setNote]         = useState('');
-  const [reportFile,   setReportFile]   = useState(null);   // completion report — always required
-  const [expenseFile,  setExpenseFile]  = useState(null);   // expense proof — required only if expense > 0
-  const [saving,       setSaving]       = useState(false);
+  const [expense,       setExpense]       = useState('');
+  const [note,          setNote]          = useState('');
+  const [reportFiles,   setReportFiles]   = useState([]);
+  const [expenseFiles,  setExpenseFiles]  = useState([]);
+  const [saving,        setSaving]        = useState(false);
   const reportRef  = useRef(null);
   const expenseRef = useRef(null);
-
-  const numericExpense  = expense === '' ? 0 : Number(expense);
-  const hasExpense      = !isNaN(numericExpense) && numericExpense > 0;
-
-  // Valid when:
-  // 1. completion report is attached (always required)
-  // 2. if expense > 0, expense proof file must also be attached
-  const valid = !!reportFile && (!hasExpense || !!expenseFile);
-
+  const numericExpense = expense === '' ? 0 : Number(expense);
+  const hasExpense     = !isNaN(numericExpense) && numericExpense > 0;
+  const valid          = reportFiles.length > 0 && (!hasExpense || expenseFiles.length > 0);
   const save = async () => {
-    if (!reportFile) { alert('Please attach a completion report.'); return; }
-    if (hasExpense && !expenseFile) { alert('Please attach an expense proof file.'); return; }
+    if (!reportFiles.length) { alert('Please attach at least one completion report.'); return; }
+    if (hasExpense && !expenseFiles.length) { alert('Please attach expense proof file(s).'); return; }
     setSaving(true);
     try {
       const fd = new FormData();
-      fd.append('report',         reportFile);
+      reportFiles.forEach(f => fd.append('report', f));
       fd.append('expense_amount', String(isNaN(numericExpense) ? 0 : numericExpense));
-      if (note)        fd.append('expense_note', note);
-      if (expenseFile) fd.append('expense_file', expenseFile);
+      if (note) fd.append('expense_note', note);
+      expenseFiles.forEach(f => fd.append('expense_file', f));
       await svcApi.post(`/tickets/${ticket.id}/worker-completion`, fd, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
@@ -286,26 +280,35 @@ function CompletionModal({ ticket, onClose, onSuccess }) {
     finally { setSaving(false); }
   };
 
-  const FileBox = ({ label, file, onAttach, onRemove, inputRef, required, accept }) => (
+  const MultiFileBox = ({ label, files, onAdd, onRemove, inputRef, required, accept, color='blue' }) => (
     <div>
       <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
         {label} {required && <span className="text-red-500">*</span>}
+        <span className="text-slate-400 font-normal normal-case ml-1">— multiple allowed</span>
       </label>
-      <input ref={inputRef} type="file" accept={accept} className="hidden"
-        onChange={e => onAttach(e.target.files?.[0] || null)}/>
-      {!file ? (
+      <input ref={inputRef} type="file" multiple accept={accept} className="hidden"
+        onChange={e => onAdd(Array.from(e.target.files))}/>
+      {files.length === 0 ? (
         <button type="button" onClick={() => inputRef.current?.click()}
           className="w-full border-2 border-dashed border-slate-300 rounded-2xl p-4 text-center hover:border-blue-400 hover:bg-blue-50/40 transition-all">
           <p className="text-xs font-bold text-slate-700">Tap to attach</p>
-          <p className="text-[10px] text-slate-400 mt-0.5">Photo · PDF · Doc</p>
+          <p className="text-[10px] text-slate-400 mt-0.5">Photo · PDF · Doc · multiple allowed</p>
         </button>
       ) : (
-        <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-3">
-          <svg className="w-4 h-4 text-emerald-600 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
-          <p className="text-xs font-black text-emerald-700 truncate flex-1">{file.name}</p>
-          <span className="text-[10px] text-emerald-600">{(file.size/1024).toFixed(0)}KB</span>
-          <button onClick={() => { onRemove(); if(inputRef.current) inputRef.current.value=''; }}
-            className="w-6 h-6 rounded-full bg-white border border-red-200 text-red-500 text-xs flex items-center justify-center flex-shrink-0">✕</button>
+        <div className="space-y-2">
+          {files.map((f,i) => (
+            <div key={i} className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-2.5">
+              <svg className="w-4 h-4 text-emerald-600 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+              <p className="text-xs font-black text-emerald-700 truncate flex-1">{f.name}</p>
+              <span className="text-[10px] text-emerald-600">{(f.size/1024).toFixed(0)}KB</span>
+              <button onClick={() => { onRemove(i); }}
+                className="w-6 h-6 rounded-full bg-white border border-red-200 text-red-500 text-xs flex items-center justify-center flex-shrink-0">✕</button>
+            </div>
+          ))}
+          <button type="button" onClick={() => inputRef.current?.click()}
+            className="text-[11px] font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1">
+            + Add another file
+          </button>
         </div>
       )}
     </div>
@@ -368,11 +371,11 @@ function CompletionModal({ ticket, onClose, onSuccess }) {
                     <span className="text-base">🧾</span>
                     <p className="text-xs font-black text-amber-700">Expense of ₹{numericExpense.toLocaleString('en-IN')} requires proof</p>
                   </div>
-                  <FileBox
+                  <MultiFileBox
                     label="Expense Proof"
-                    file={expenseFile}
-                    onAttach={setExpenseFile}
-                    onRemove={() => setExpenseFile(null)}
+                    files={expenseFiles}
+                    onAdd={f => setExpenseFiles(prev => [...prev, ...f])}
+                    onRemove={i => setExpenseFiles(prev => prev.filter((_,j)=>j!==i))}
                     inputRef={expenseRef}
                     required={true}
                     accept="image/*,application/pdf,.doc,.docx"
@@ -381,11 +384,11 @@ function CompletionModal({ ticket, onClose, onSuccess }) {
               )}
 
               {/* Completion report — always required */}
-              <FileBox
+              <MultiFileBox
                 label="Completion Report"
-                file={reportFile}
-                onAttach={setReportFile}
-                onRemove={() => setReportFile(null)}
+                files={reportFiles}
+                onAdd={f => setReportFiles(prev => [...prev, ...f])}
+                onRemove={i => setReportFiles(prev => prev.filter((_,j)=>j!==i))}
                 inputRef={reportRef}
                 required={true}
                 accept="image/*,application/pdf,.doc,.docx"
@@ -395,9 +398,9 @@ function CompletionModal({ ticket, onClose, onSuccess }) {
               {!valid && (
                 <div className="bg-red-50 border border-red-100 rounded-xl px-3 py-2">
                   <p className="text-[11px] text-red-600 font-medium">
-                    {!reportFile
+                    {reportFiles.length === 0
                       ? '📋 Completion report is required'
-                      : hasExpense && !expenseFile
+                      : hasExpense && expenseFiles.length === 0
                       ? '🧾 Expense proof required when expense > ₹0'
                       : ''}
                   </p>
@@ -589,7 +592,7 @@ export default function TicketDetailPage() {
                   ['Contact',    ticket.contact_name || '—'],
                   ['Phone',      ticket.contact_phone || '—'],
                   ['Designation',ticket.designation || '—'],
-                  ['PLC',        ticket.needs_plc ? (ticket.plc_type ? `Yes (${ticket.plc_type})` : 'Yes') : 'No'],
+                  ['PLC',        ticket.needs_plc ? (ticket.plc_type === 'site' ? '🏭 On-site' : ticket.plc_type === 'remote' ? '💻 Remote' : 'Yes') : 'No'],
                   ['Wiring',     ticket.needs_wiring ? 'Yes' : 'No'],
                   ['Location',   ticket.address || '—'],
                 ].map(([k,v]) => (
@@ -599,6 +602,32 @@ export default function TicketDetailPage() {
                   </div>
                 ))}
               </div>
+
+              {/* PLC type toggle — visible to workers and admins when PLC is required */}
+              {ticket.needs_plc && (isWorker || isAdmin) && (
+                <div className="mt-4 flex items-center gap-3">
+                  <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">PLC Type</p>
+                  <div className="flex gap-2">
+                    {[['site','🏭 On-site'],['remote','💻 Remote']].map(([v,l]) => (
+                      <button key={v} type="button"
+                        onClick={async () => {
+                          try {
+                            await svcApi.patch(`/tickets/${ticket.id}/plc-type`, { plc_type: v });
+                            load();
+                          } catch(e) { alert(e.response?.data?.error || 'Failed'); }
+                        }}
+                        className={`px-3 py-1.5 text-[11px] font-bold rounded-xl border-2 transition-all ${
+                          ticket.plc_type === v
+                            ? 'border-slate-900 bg-slate-900 text-white'
+                            : 'border-slate-200 text-slate-600 hover:border-slate-400'
+                        }`}>
+                        {l}
+                      </button>
+                    ))}
+                  </div>
+                  {!ticket.plc_type && <span className="text-[10px] text-amber-600 font-bold">⚠ Please select type</span>}
+                </div>
+              )}
 
               {ticket.description && (
                 <div className="mt-4 bg-amber-50 border border-amber-200 rounded-xl px-3.5 py-3">
@@ -732,6 +761,161 @@ function BillingAuditMount({ ticketId, isWarranty, onChange }) {
 }
 
 
+
+/* ═══════════════════════════════════════════════════════════════════
+   MULTI FILE UPLOAD COMPONENT
+   Allows workers to add multiple reports + expense files after initial submission
+   ═══════════════════════════════════════════════════════════════════ */
+function MultiFileUpload({ ticketId, workerId, onDone }) {
+  const [open,      setOpen]      = useState(false);
+  const [fileType,  setFileType]  = useState('report');
+  const [files,     setFiles]     = useState([]);
+  const [expense,   setExpense]   = useState('');
+  const [note,      setNote]      = useState('');
+  const [saving,    setSaving]    = useState(false);
+  const [existing,  setExisting]  = useState([]);
+  const inputRef = useRef(null);
+
+  const fullUrl = (u) => {
+    if (!u) return '#';
+    if (u.startsWith('http')) return u;
+    const isDev = window.location.hostname === 'localhost';
+    const base = isDev ? 'http://localhost:5001' : `${window.location.protocol}//${window.location.hostname}`;
+    return `${base}${u}`;
+  };
+
+  const loadFiles = async () => {
+    try {
+      const { data } = await svcApi.get(`/tickets/${ticketId}/worker-files`);
+      setExisting(data.filter(f => f.worker_id === workerId));
+    } catch {}
+  };
+
+  useEffect(() => { if (open) loadFiles(); }, [open]);
+
+  const handleUpload = async () => {
+    if (!files.length) { alert('Select at least one file'); return; }
+    setSaving(true);
+    try {
+      const fd = new FormData();
+      fd.append('file_type', fileType);
+      if (expense) fd.append('expense_amount', expense);
+      if (note)    fd.append('note', note);
+      files.forEach(f => fd.append('files', f));
+      await svcApi.post(`/tickets/${ticketId}/worker-files`, fd, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      setFiles([]); setExpense(''); setNote('');
+      loadFiles();
+      onDone?.();
+    } catch (e) { alert(e.response?.data?.error || 'Upload failed'); }
+    finally { setSaving(false); }
+  };
+
+  const fileIcon = (path) => {
+    const ext = path?.split('.').pop()?.toLowerCase();
+    if (['jpg','jpeg','png','gif','webp'].includes(ext)) return '🖼';
+    if (['pdf'].includes(ext)) return '📄';
+    return '📎';
+  };
+
+  return (
+    <div>
+      <button type="button" onClick={() => setOpen(!open)}
+        className="inline-flex items-center gap-1.5 text-[10px] font-bold text-slate-500 hover:text-slate-700 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg transition-all">
+        <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        {open ? 'Hide files' : `Add more files${existing.length ? ` (${existing.length} uploaded)` : ''}`}
+      </button>
+
+      {open && (
+        <div className="mt-3 bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+          {/* Existing files */}
+          {existing.length > 0 && (
+            <div>
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Previously uploaded</p>
+              <div className="space-y-1.5">
+                {existing.map(f => (
+                  <div key={f.id} className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-2">
+                    <span className="text-sm">{fileIcon(f.file_path)}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[11px] font-bold text-slate-700 truncate">{f.original_name || f.file_path.split('/').pop()}</p>
+                      <p className="text-[10px] text-slate-400">
+                        {f.file_type === 'expense' ? `💸 Expense ₹${Number(f.expense_amount||0).toLocaleString('en-IN')}` : '📋 Report'}
+                        {f.note && ` · ${f.note}`}
+                      </p>
+                    </div>
+                    <a onClick={(e)=>{e.preventDefault();window.open(fullUrl(f.file_path),"_blank");}}
+                       href={fullUrl(f.file_path)} target="_blank" rel="noopener noreferrer"
+                       className="text-[10px] font-bold text-blue-600 hover:text-blue-700 flex-shrink-0">View</a>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Upload new files */}
+          <div>
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Upload new files</p>
+
+            {/* File type toggle */}
+            <div className="flex gap-2 mb-3">
+              {[['report','📋 Report'],['expense','💸 Expense']].map(([v,l]) => (
+                <button key={v} type="button" onClick={()=>setFileType(v)}
+                  className={`flex-1 py-1.5 text-[11px] font-bold rounded-lg border-2 transition-all ${fileType===v?'border-slate-900 bg-slate-900 text-white':'border-slate-200 text-slate-600 hover:border-slate-300'}`}>
+                  {l}
+                </button>
+              ))}
+            </div>
+
+            {/* Expense amount (only for expense type) */}
+            {fileType === 'expense' && (
+              <div className="mb-2">
+                <input type="number" min="0" value={expense} onChange={e=>setExpense(e.target.value)}
+                  placeholder="Expense amount (₹)"
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:border-slate-400"/>
+              </div>
+            )}
+
+            {/* Note */}
+            <div className="mb-2">
+              <input type="text" value={note} onChange={e=>setNote(e.target.value)}
+                placeholder="Note (optional)"
+                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:border-slate-400"/>
+            </div>
+
+            {/* File selector */}
+            <input ref={inputRef} type="file" multiple accept="image/*,application/pdf,.doc,.docx"
+              className="hidden" onChange={e=>setFiles(Array.from(e.target.files))}/>
+            {files.length === 0 ? (
+              <button type="button" onClick={()=>inputRef.current?.click()}
+                className="w-full border-2 border-dashed border-slate-300 rounded-xl py-3 text-[11px] text-slate-500 hover:border-slate-400 hover:bg-white transition-all">
+                Tap to select files
+              </button>
+            ) : (
+              <div className="space-y-1 mb-2">
+                {files.map((f,i) => (
+                  <div key={i} className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-1.5">
+                    <span className="text-sm">📎</span>
+                    <span className="text-[11px] text-slate-700 truncate flex-1">{f.name}</span>
+                    <button onClick={()=>setFiles(prev=>prev.filter((_,j)=>j!==i))} className="text-red-400 text-xs">✕</button>
+                  </div>
+                ))}
+                <button type="button" onClick={()=>inputRef.current?.click()}
+                  className="text-[10px] text-blue-600 font-bold">+ Add more</button>
+              </div>
+            )}
+
+            <button type="button" onClick={handleUpload} disabled={saving || !files.length}
+              className="w-full mt-2 py-2 bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-bold rounded-xl disabled:opacity-40 transition-all">
+              {saving ? 'Uploading…' : `Upload ${files.length || ''} file${files.length!==1?'s':''}`}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ─── Worker's slim billing summary (no edit) ─── */
 function WorkerBillingSummary({ svcUserId, billing }) {
   const mine = (billing || []).find(b => b.worker_id === svcUserId);
@@ -781,6 +965,12 @@ function WorkerBillingSummary({ svcUserId, billing }) {
           ? <span className="text-[11px] font-bold text-slate-700 bg-slate-100 px-2.5 py-1 rounded-full">Customer charged {inrFmt(mine.charged_amount)}</span>
           : <span className="text-[11px] font-bold text-slate-500 italic">Charge will be entered by admin</span>} */}
       </div>
+      {/* Add more files button */}
+      {hasReport && (
+        <div className="mt-3 pt-3 border-t border-slate-100">
+          <MultiFileUpload ticketId={ticketId} workerId={svcUserId} onDone={()=>{}} />
+        </div>
+      )}
     </section>
   );
 }

@@ -25,11 +25,12 @@ export function SvcAuthProvider({ children }) {
   };
 
   const isSuperAdmin = svcUser?.role === 'superadmin';
+  const isSales      = svcUser?.role === 'admin' && (svcUser?.department || '').toLowerCase().includes('sales');
   const isAdmin      = svcUser?.role === 'admin' || isSuperAdmin;
   const isWorker     = svcUser?.role === 'plc' || svcUser?.role === 'wireman';
 
   return (
-    <SvcAuthCtx.Provider value={{ svcUser, svcLogin, svcLogout, isSuperAdmin, isAdmin, isWorker, svcReady }}>
+    <SvcAuthCtx.Provider value={{ svcUser, svcLogin, svcLogout, isSuperAdmin, isSales, isAdmin, isWorker, svcReady }}>
       {children}
     </SvcAuthCtx.Provider>
   );

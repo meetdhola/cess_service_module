@@ -1462,7 +1462,7 @@ function ReportsTab() {
 /* ─── MAIN DASHBOARD                                          ─── */
 /* ═══════════════════════════════════════════════════════════════ */
 export default function AdminDashboard() {
-  const { svcUser, svcLogout, isSuperAdmin } = useSvcAuth();
+  const { svcUser, svcLogout, isSuperAdmin, isSales } = useSvcAuth();
   const navigate = useNavigate();
   const { tab: urlTab } = useParams();
 
@@ -1471,11 +1471,15 @@ export default function AdminDashboard() {
   const setTab = useCallback((newTab) => navigate(`/service/admin/${newTab}`), [navigate]);
 
   useEffect(() => {
-    const restricted = ['reports','profitability','users','sessions'];
-    if (!isSuperAdmin && restricted.includes(tab)) {
+    const superOnly = ['users','sessions'];
+    const salesOk   = ['reports','profitability'];
+    if (!isSuperAdmin && superOnly.includes(tab)) {
       navigate('/service/admin/overview', { replace: true });
     }
-  }, [tab, isSuperAdmin, navigate]);
+    if (!isSuperAdmin && !isSales && salesOk.includes(tab)) {
+      navigate('/service/admin/overview', { replace: true });
+    }
+  }, [tab, isSuperAdmin, isSales, navigate]);
 
   const [tickets,setTickets]   = useState([]);
   const [workers,setWorkers]   = useState([]);
@@ -1556,6 +1560,33 @@ const wireW = workers.filter(w => w.role === 'wireman' || (w.role === 'admin' &&
     catch(e){ console.error(e); }
   };
 
+  const [bulkResetModal, setBulkResetModal] = useState(false);
+  const [bulkConfirm1,   setBulkConfirm1]   = useState('');
+  const [bulkConfirm2,   setBulkConfirm2]   = useState('');
+  const [bulkResult,     setBulkResult]     = useState(null);
+
+  const bulkRegenKeys = async () => {
+    if (bulkConfirm1 !== 'RESET ALL KEYS' || bulkConfirm2 !== 'RESET ALL KEYS') {
+      alert('Both fields must say exactly: RESET ALL KEYS');
+      return;
+    }
+    setBusy(true);
+    try {
+      const { data } = await svcApi.patch('/auth/users/bulk-regen-keys', {
+        confirm1: bulkConfirm1,
+        confirm2: bulkConfirm2,
+      });
+      setBulkResult(data.users);
+      setBulkResetModal(false);
+      setBulkConfirm1(''); setBulkConfirm2('');
+      loadAllUsers();
+      alert(`✅ Reset ${data.users.length} secret keys successfully!`);
+    } catch (e) { alert(e.response?.data?.error || 'Failed'); }
+    finally { setBusy(false); }
+  };
+
+      
+  
   const regenKey = async (u) => {
     setBusy(true);
     try {
@@ -1624,9 +1655,11 @@ const wireW = workers.filter(w => w.role === 'wireman' || (w.role === 'admin' &&
     {k:'tickets',  icon:I.ticket,   label:'Tickets', badge:counts.unassigned||null},
     {k:'tasks', icon:I.tasks || I.ticket, label:'Tasks'},
     {k:'workers',  icon:I.workers,  label:'Workers'},
-    ...(isSuperAdmin?[
+    ...((isSuperAdmin||isSales)?[
       {k:'reports',       icon:I.reports,  label:'Reports'},
       {k:'profitability', icon:I.profit,   label:'Profitability'},
+    ]:[]),
+    ...(isSuperAdmin?[
       {k:'users',         icon:I.users,    label:'Users'},
       {k:'sessions',      icon:I.sessions, label:'Sessions', badge:liveCount||null},
     ]:[]),
@@ -1963,7 +1996,7 @@ const wireW = workers.filter(w => w.role === 'wireman' || (w.role === 'admin' &&
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs">
   <thead className="bg-slate-50/50 border-b border-slate-100">
-    <tr>{['Worker','Role','Department','Phone','Status'].map(h=><th key={h} className="text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider px-4 py-3">{h}</th>)}</tr>
+    <tr>{['Worker','Role','Department','Phone','Salary/mo','IRC/day','Status'].map(h=><th key={h} className="text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider px-4 py-3">{h}</th>)}</tr>
   </thead>
   <tbody className="divide-y divide-slate-100">
     {workers.length===0 ? (
@@ -2000,6 +2033,8 @@ const wireW = workers.filter(w => w.role === 'wireman' || (w.role === 'admin' &&
           </td>
           <td className="px-4 py-3 text-slate-600">{w.department||'—'}</td>
           <td className="px-4 py-3 text-slate-600 font-mono">{w.phone}</td>
+          <td className="px-4 py-3 text-slate-600 font-mono text-xs">{w.monthly_salary?`₹${Number(w.monthly_salary).toLocaleString('en-IN')}`:'—'}</td>
+          <td className="px-4 py-3 text-slate-600 font-mono text-xs">{w.irc_daily_rate?`₹${Number(w.irc_daily_rate).toLocaleString('en-IN')}`:'—'}</td>
           <td className="px-4 py-3">
             <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-emerald-700">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"/>
@@ -2045,9 +2080,15 @@ const wireW = workers.filter(w => w.role === 'wireman' || (w.role === 'admin' &&
                     <h3 className="text-sm font-black text-slate-900">User Management</h3>
                     <p className="text-[11px] text-slate-400 mt-0.5">{allUsers.length} users · manage roles, keys, and access</p>
                   </div>
-                  <button onClick={()=>setAddUserM(true)} className="flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition-all shadow-md">
-                    <span className="w-3 h-3">{I.plus}</span>Add User
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button onClick={()=>setBulkResetModal(true)}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-xs font-bold rounded-xl transition-all">
+                      🔄 Reset All Keys
+                    </button>
+                    <button onClick={()=>setAddUserM(true)} className="flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition-all shadow-md">
+                      <span className="w-3 h-3">{I.plus}</span>Add User
+                    </button>
+                  </div>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs">
@@ -2351,6 +2392,43 @@ const wireW = workers.filter(w => w.role === 'wireman' || (w.role === 'admin' &&
         onSuccess={()=>{ setReopenM(null); loadTickets(); }}
       />
       {/* ════════════ KEY DISPLAY MODAL ════════════ */}
+      {/* ─── Bulk Reset Keys Modal ─── */}
+      {bulkResetModal && (
+        <div className="fixed inset-0 z-[100] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl p-6 w-full max-w-md">
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-11 h-11 rounded-2xl bg-red-100 flex items-center justify-center text-xl flex-shrink-0">⚠️</div>
+              <div>
+                <h3 className="text-base font-black text-slate-900">Reset All Secret Keys</h3>
+                <p className="text-[11px] text-red-600 mt-0.5">This changes ALL users login keys immediately</p>
+              </div>
+            </div>
+            <div className="space-y-3 mb-5">
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Type "RESET ALL KEYS" to confirm</label>
+                <input type="text" value={bulkConfirm1} onChange={e=>setBulkConfirm1(e.target.value)}
+                  placeholder="RESET ALL KEYS"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-red-400"/>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Type it again</label>
+                <input type="text" value={bulkConfirm2} onChange={e=>setBulkConfirm2(e.target.value)}
+                  placeholder="RESET ALL KEYS"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-red-400"/>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={()=>{setBulkResetModal(false);setBulkConfirm1('');setBulkConfirm2('');}}
+                className="flex-1 py-2.5 border border-slate-200 text-slate-600 font-semibold text-sm rounded-xl">Cancel</button>
+              <button onClick={bulkRegenKeys} disabled={busy||bulkConfirm1!=='RESET ALL KEYS'||bulkConfirm2!=='RESET ALL KEYS'}
+                className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold text-sm rounded-xl disabled:opacity-40">
+                {busy?'Resetting…':'🔄 Reset All Keys'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {keyModal && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden">

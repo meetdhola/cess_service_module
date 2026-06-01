@@ -126,6 +126,9 @@ export default function BillingAuditPanel({ ticketId, isWarranty, isPrivileged }
                 {sg && (
                   <span className="text-[9px] font-bold text-slate-500 bg-white border border-slate-200 px-1.5 py-0.5 rounded">
                     {sg.hours}h · {sg.basis}
+                    {sg?.half_day_rate > 0 && (
+                      <> · <span className="text-slate-400">½d ₹{(sg.half_day_rate||0).toLocaleString('en-IN')} · full ₹{(sg.full_day_rate||0).toLocaleString('en-IN')}</span></>
+                    )}
                   </span>
                 )}
                 {sg?.completed_at && (
@@ -173,6 +176,18 @@ export default function BillingAuditPanel({ ticketId, isWarranty, isPrivileged }
                     <div className="flex items-center gap-2 text-[11px] bg-blue-50 border border-blue-100 rounded-lg px-2.5 py-1.5">
                       <svg className="w-3 h-3 text-blue-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
                       <span className="text-blue-700">Rate card suggests <span className="font-black">{inrFmt(sg.suggested_amount)}</span> <span className="text-blue-500">({sg.basis})</span></span>
+                      {sg.half_day_rate > 0 && (
+                        <span className="text-blue-500 text-[10px] ml-2">
+                          Half-day: <span className="font-black">₹{sg.half_day_rate.toLocaleString('en-IN')}</span>
+                          {' · '}Full-day: <span className="font-black">₹{sg.full_day_rate.toLocaleString('en-IN')}</span>
+                        </span>
+                      )}
+                      {sg.half_day_rate > 0 && (
+                        <span className="text-blue-500 text-[10px] ml-2">
+                          Half-day: <span className="font-black">₹{sg.half_day_rate.toLocaleString('en-IN')}</span>
+                          {' · '}Full-day: <span className="font-black">₹{sg.full_day_rate.toLocaleString('en-IN')}</span>
+                        </span>
+                      )}
                       <button type="button" onClick={() => setEditAmount(String(sg.suggested_amount))}
                         className="ml-auto text-[10px] font-bold px-2 py-0.5 rounded bg-blue-600 hover:bg-blue-700 text-white">
                         Use this

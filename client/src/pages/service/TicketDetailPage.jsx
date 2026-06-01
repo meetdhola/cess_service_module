@@ -656,7 +656,7 @@ export default function TicketDetailPage() {
             {isAdmin ? (
               <AdminBillingSection ticket={ticket} billing={billing} onChange={load}/>
             ) : (
-              <WorkerBillingSummary svcUserId={svcUser?.id} billing={billing}/>
+              <WorkerBillingSummary svcUserId={svcUser?.id} billing={billing} ticketId={ticketId}/>
             )}
 
             {/* Invoice + Challans */}
@@ -917,7 +917,7 @@ function MultiFileUpload({ ticketId, workerId, onDone }) {
 }
 
 /* ─── Worker's slim billing summary (no edit) ─── */
-function WorkerBillingSummary({ svcUserId, billing }) {
+function WorkerBillingSummary({ svcUserId, billing, ticketId }) {
   const mine = (billing || []).find(b => b.worker_id === svcUserId);
   if (!mine) return null;
   const hasReport  = !!(mine.completion_report_path || mine.report_url);

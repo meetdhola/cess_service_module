@@ -737,6 +737,8 @@ router.get('/:id/billing-status', svcAuth(), async (req, res) => {
                               ? b.expense_file_path
                               : `/uploads/${b.expense_file_path}`)
                             : null,
+        all_report_files:  b?.completion_report_path ? [{ url: b.completion_report_path.startsWith('/uploads') ? b.completion_report_path : `/uploads/${b.completion_report_path}`, name: 'Report' }] : [],
+        all_expense_files: b?.expense_file_path ? [{ url: b.expense_file_path.startsWith('/uploads') ? b.expense_file_path : `/uploads/${b.expense_file_path}`, name: 'Expense proof' }] : [],
       };
     });
 

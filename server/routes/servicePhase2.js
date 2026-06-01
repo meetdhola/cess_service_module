@@ -441,11 +441,33 @@ router.get('/tickets/:id/full', svcAuth(), async (req, res) => {
     if (!ticket.rows.length) return res.status(404).json({ error: 'Ticket not found' });
 
     const toUrl = (p) => !p ? null : p.startsWith('/uploads') ? p : `/uploads/${p}`;
-    const billingMapped = billing.rows.map(b => ({
-      ...b,
-      report_url:       toUrl(b.completion_report_path),
-      expense_file_url: toUrl(b.expense_file_path),
-    }));
+
+    // Fetch extra files from ticket_worker_files for all workers
+    const { rows: extraFiles } = await pool.query(
+      `SELECT * FROM ticket_worker_files WHERE ticket_id=$1 ORDER BY uploaded_at ASC`,
+      [ticketUUID]);
+
+    const billingMapped = billing.rows.map(b => {
+      const workerExtras = extraFiles.filter(f => f.worker_id === b.worker_id);
+      const extraReports  = workerExtras.filter(f => f.file_type === 'report')
+        .map(f => ({ url: toUrl(f.file_path), name: f.original_name, size: f.file_size }));
+      const extraExpenses = workerExtras.filter(f => f.file_type === 'expense')
+        .map(f => ({ url: toUrl(f.file_path), name: f.original_name, size: f.file_size, amount: f.expense_amount }));
+      return {
+        ...b,
+        report_url:       toUrl(b.completion_report_path),
+        expense_file_url: toUrl(b.expense_file_path),
+        // All files including extras
+        all_report_files: [
+          ...(b.completion_report_path ? [{ url: toUrl(b.completion_report_path), name: 'Report' }] : []),
+          ...extraReports,
+        ],
+        all_expense_files: [
+          ...(b.expense_file_path ? [{ url: toUrl(b.expense_file_path), name: 'Expense proof' }] : []),
+          ...extraExpenses,
+        ],
+      };
+    });
     res.json({
       ticket:      ticket.rows[0],
       assignments: assignments.rows,
@@ -517,6 +539,25 @@ router.get('/tickets/:id/worker-files', svcAuth(), async (req, res) => {
       [req.params.id]);
     res.json(rows);
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+
+/* GET /tickets/:id/reopens — reopen history for a ticket */
+router.get('/tickets/:id/reopens', svcAuth(), async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT tr.*, su.name AS reopened_by_name
+         FROM ticket_reopens tr
+         LEFT JOIN service_users su ON su.id = tr.reopened_by
+        WHERE tr.ticket_id = $1
+        ORDER BY tr.reopened_at DESC`,
+      [req.params.id]);
+    res.json(rows);
+  } catch (e) {
+    // Table may not exist yet — return empty array gracefully
+    console.error('Reopens fetch error:', e.message);
+    res.json([]);
+  }
 });
 
 module.exports = router;

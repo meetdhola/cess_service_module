@@ -945,22 +945,24 @@ function WorkerBillingSummary({ svcUserId, billing, ticketId }) {
           </span>
         )}
         {/* File links */}
-        {(mine.completion_report_path || mine.report_url) && (
-          <a onClick={(e)=>{e.preventDefault();window.open(fullUrl(mine.report_url||mine.completion_report_path),"_blank");}}
-             href={fullUrl(mine.report_url || mine.completion_report_path)} target="_blank" rel="noopener noreferrer"
+        {/* All report files */}
+        {(mine.all_report_files?.length ? mine.all_report_files : (mine.report_url||mine.completion_report_path) ? [{url:mine.report_url||mine.completion_report_path}] : []).map((f,i) => (
+          <a key={i} onClick={(e)=>{e.preventDefault();window.open(fullUrl(f.url),"_blank");}}
+             href={fullUrl(f.url)} target="_blank" rel="noopener noreferrer"
              className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-700 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-full">
             <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-            View report
+            Report {mine.all_report_files?.length > 1 ? i+1 : ''}
           </a>
-        )}
-        {mine.expense_file_url && (
-          <a onClick={(e)=>{e.preventDefault();window.open(fullUrl(mine.expense_file_url),"_blank");}}
-             href={fullUrl(mine.expense_file_url)} target="_blank" rel="noopener noreferrer"
+        ))}
+        {/* All expense files */}
+        {(mine.all_expense_files?.length ? mine.all_expense_files : mine.expense_file_url ? [{url:mine.expense_file_url}] : []).map((f,i) => (
+          <a key={i} onClick={(e)=>{e.preventDefault();window.open(fullUrl(f.url),"_blank");}}
+             href={fullUrl(f.url)} target="_blank" rel="noopener noreferrer"
              className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600 hover:text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full">
             <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-            View expense proof
+            Expense {mine.all_expense_files?.length > 1 ? i+1 : 'proof'}
           </a>
-        )}
+        ))}
         {/* {hasCharged
           ? <span className="text-[11px] font-bold text-slate-700 bg-slate-100 px-2.5 py-1 rounded-full">Customer charged {inrFmt(mine.charged_amount)}</span>
           : <span className="text-[11px] font-bold text-slate-500 italic">Charge will be entered by admin</span>} */}

@@ -1201,6 +1201,11 @@ const startTimer = async (id, needsAssign=false) => {
             <input placeholder="Search tickets, customers..." className="flex-1 bg-transparent text-sm outline-none placeholder-slate-400"/>
             <kbd className="hidden lg:block text-[10px] text-slate-400 bg-white border border-slate-200 rounded px-1.5 py-0.5 font-mono">⌘K</kbd>
           </div>
+
+          <Link to="/service" className="hidden sm:flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-full transition-all">
+                      <span className="w-3 h-3">{I.plus}</span>New Request
+                    </Link>
+                    
           <div className="flex items-center gap-2 ml-auto">
             {Object.keys(sessions).length > 0 && (
               <button onClick={()=>setTab('timer')} className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full border bg-emerald-50 border-emerald-200 hover:bg-emerald-100 transition-all">

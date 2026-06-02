@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import svcApi from '../../serviceApi';
@@ -1469,6 +1470,7 @@ export default function AdminDashboard() {
   const VALID_TABS = ['overview','tickets','workers','reports','profitability','users','sessions','tasks'];
   const tab = VALID_TABS.includes(urlTab) ? urlTab : 'overview';
   const setTab = useCallback((newTab) => navigate(`/service/admin/${newTab}`), [navigate]);
+  const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
 
   useEffect(() => {
     const superOnly = ['users','sessions'];
@@ -1778,7 +1780,7 @@ const wireW = workers.filter(w => w.role === 'wireman' || (w.role === 'admin' &&
                         <p className="text-xs font-medium text-slate-500">{l}</p>
                         <span className="w-3 h-3 inline-block text-slate-300 group-hover:text-blue-600 transition-colors">{I.upRight}</span>
                       </div>
-                      <p className="text-3xl font-black text-slate-900">{v}<span className="text-base font-bold text-slate-300 ml-1">/{counts.total||1}</span></p>
+                      <p className="text-3xl font-black text-slate-900">{v}<span className="text-base font-bold text-slate-300 ml-1">/{counts.total}</span></p>
                       <p className="text-[11px] text-slate-400 mt-2">{sub}</p>
                     </button>
                   ))}
@@ -2246,7 +2248,7 @@ const wireW = workers.filter(w => w.role === 'wireman' || (w.role === 'admin' &&
                 <span className="text-[9px] font-black tracking-[0.15em] uppercase text-slate-400 mt-7">New</span>
               </div>
 
-              {NAV.slice(2, 4).map(item => (
+              {NAV.slice(2, 3).map(item => (
                 <button key={item.k} onClick={()=>setTab(item.k)}
                   className="relative flex flex-col items-center justify-center py-1.5 transition-all active:scale-90">
                   <div className={`absolute top-0 left-1/2 -translate-x-1/2 h-0.5 rounded-full bg-slate-900 transition-all duration-300 ${tab===item.k ? 'w-7 opacity-100' : 'w-0 opacity-0'}`}/>
@@ -2257,11 +2259,42 @@ const wireW = workers.filter(w => w.role === 'wireman' || (w.role === 'admin' &&
                   <span className={`text-[9px] tracking-[0.12em] uppercase transition-all ${tab===item.k ? 'text-slate-900 font-black' : 'text-slate-400 font-bold'}`}>{item.label}</span>
                 </button>
               ))}
+              {/* More — shows remaining tabs + logout */}
+              <div className="relative flex flex-col items-center justify-center py-1.5">
+                <button onClick={()=>setMobileMoreOpen(p=>!p)} className="flex flex-col items-center gap-0.5 active:scale-90 transition-all">
+                  <div className={`w-5 h-5 mb-0.5 ${NAV.slice(3).some(i=>i.k===tab)?'text-slate-900':'text-slate-400'}`}>
+                    <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+                  </div>
+                  <span className={`text-[9px] tracking-[0.12em] uppercase font-bold ${NAV.slice(3).some(i=>i.k===tab)?'text-slate-900':'text-slate-400'}`}>More</span>
+                </button>
+{/* More drawer rendered via portal to escape overflow-hidden */}
+              </div>
             </div>
           </div>
         </div>
       </nav>
 
+      {/* More drawer portal */}
+      {mobileMoreOpen && createPortal(
+        <>
+          <div className="fixed inset-0 z-[90]" onClick={()=>setMobileMoreOpen(false)}/>
+          <div className="fixed bottom-20 right-4 bg-white rounded-2xl shadow-2xl border border-slate-200/60 min-w-[160px] z-[100]" style={{overflow:'visible'}}>
+            {NAV.slice(3).map(item => (
+              <button key={item.k} onClick={()=>{setTab(item.k);setMobileMoreOpen(false);}}
+                className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-all ${tab===item.k?'bg-slate-100':'hover:bg-slate-50'}`}>
+                <span className={`w-4 h-4 flex-shrink-0 ${tab===item.k?'text-slate-900':'text-slate-400'}`}>{item.icon}</span>
+                <span className={`text-xs font-bold ${tab===item.k?'text-slate-900':'text-slate-600'}`}>{item.label}</span>
+              </button>
+            ))}
+            <button onClick={()=>{svcLogout();setMobileMoreOpen(false);}}
+              className="w-full flex items-center gap-3 px-4 py-3 border-t border-slate-100">
+              <span className="w-4 h-4 text-red-500">{I.logout}</span>
+              <span className="text-xs font-bold text-red-600">Sign Out</span>
+            </button>
+          </div>
+        </>,
+        document.body
+      )}
       {/* ════════════ ASSIGN MODAL ════════════ */}
       {assignM && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">

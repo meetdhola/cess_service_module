@@ -558,8 +558,6 @@ export default function InquiryForm() {
     onSelect={handlePartySelect}
   />
   <p className="text-[10px] text-slate-400 mt-1.5 flex items-center gap-1">
-    <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4m0-4h.01"/></svg>
-    Type to search from 283 registered parties
   </p>
 </div>
               {/* <div><FLabel>Customer / Company *</FLabel><FInput placeholder="e.g. Gujarat Pipes Ltd" value={form.customer_name} onChange={e=>set('customer_name',e.target.value)}/></div> */}

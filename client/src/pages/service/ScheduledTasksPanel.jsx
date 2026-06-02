@@ -30,7 +30,7 @@ function dueChip(days, status) {
 
 
 export default function ScheduledTasksPanel({ ticketId }) {
-  const { svcUser } = useSvcAuth();
+  const { svcUser, can } = useSvcAuth();
   const isAdmin = svcUser?.role === 'admin' || svcUser?.role === 'superadmin';
 
   const [list, setList]       = useState([]);
@@ -112,7 +112,7 @@ export default function ScheduledTasksPanel({ ticketId }) {
         </svg>
         <p className="text-xs font-black text-slate-700">Scheduled Tasks</p>
         <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">{list.length}</span>
-        {isAdmin && !showAdd && !editId && (
+        {can('create_ticket') && !showAdd && !editId && (
           <button onClick={()=>setShowAdd(true)} className="ml-auto text-[11px] font-bold px-3 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-white">+ Add task</button>
         )}
       </div>
@@ -172,7 +172,7 @@ export default function ScheduledTasksPanel({ ticketId }) {
                     {t.status === 'completed' && (
                       <button onClick={()=>setStatus(t,'pending')} className="px-2 py-0.5 rounded bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100 font-bold">Reopen</button>
                     )}
-                    {isAdmin && (
+                    {can('create_ticket') && (
                       <>
                         <button onClick={()=>startEdit(t)} className="px-2 py-0.5 rounded text-slate-500 hover:text-slate-700 hover:bg-slate-100 font-bold">Edit</button>
                         <button onClick={()=>del(t)} className="px-2 py-0.5 rounded text-red-500 hover:text-red-700 hover:bg-red-50 font-bold">Delete</button>

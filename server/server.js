@@ -28,6 +28,7 @@ app.use('/api/users', require('./routes/users'));
 
 // ── Service module routes ──
 app.use('/api/service/auth',     require('./routes/serviceAuth'));
+app.use('/api/service/permissions', require('./routes/servicePermissions'));
 
 /* ─── Party master search (public autocomplete) ─── */
 app.get('/api/service/parties/search', async (req, res) => {

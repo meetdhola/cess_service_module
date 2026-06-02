@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import svcApi from '../../serviceApi';
+import { useSvcAuth } from '../../context/SvcAuthContext';
 
 /* ════════════════════════════════════════════════════════════════════
    AdminDashboard.jsx — REPLACE the entire BillingAuditPanel function
@@ -281,8 +282,8 @@ export default function BillingAuditPanel({ ticketId, isWarranty, isPrivileged }
                       )}
                     </>
                   )}
-                  {isPrivileged && (
-                    <button onClick={() => startEdit(w)}
+                  {can('enter_billing') && (
+                 <button onClick={() => startEdit(w)}
                       className="ml-auto text-[10px] font-bold text-blue-600 hover:text-blue-700 px-2 py-0.5 rounded hover:bg-blue-50">
                       {w.has_billed ? 'Edit' : 'Enter charge'}
                     </button>

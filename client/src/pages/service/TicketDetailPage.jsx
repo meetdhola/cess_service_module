@@ -72,7 +72,7 @@ function WorkerActions({ ticket, billing, onAnyChange }) {
   const workerDone = WORKER_DONE.includes(ticket.status);
   const isWarranty = ticket.warranty_status === 'in_warranty';
 
-  const { svcUser } = useSvcAuth();
+  const { svcUser, can } = useSvcAuth();
   const myBilling = (billing || []).find(b => b.worker_id === svcUser?.id);
   const hasCompleted = !!myBilling?.completed_by_worker_at;
 
@@ -432,7 +432,7 @@ function CompletionModal({ ticket, onClose, onSuccess }) {
 export default function TicketDetailPage() {
   const { ticketId } = useParams();
   const navigate = useNavigate();
-  const { svcUser } = useSvcAuth();
+  const { svcUser, can } = useSvcAuth();
 
   const [data, setData]       = useState(null);
   const [loading, setLoading] = useState(true);
@@ -543,7 +543,7 @@ export default function TicketDetailPage() {
           <div className="flex items-center gap-2 ml-auto flex-shrink-0">
             {isWorker && <WorkerActions ticket={ticket} billing={billing} onAnyChange={load}/>}
 
-            {isAdmin && ticket.status === 'Report Submitted' && (
+            {can('close_ticket') && ticket.status === 'Report Submitted' && (
               canActOnClosure ? (
                 <button onClick={closeTicket} disabled={closing}
                   className="flex items-center gap-1.5 px-3 sm:px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-2xl shadow-md shadow-emerald-500/20 transition-all disabled:opacity-60">
@@ -557,7 +557,7 @@ export default function TicketDetailPage() {
               )
             )}
 
-            {isAdmin && TERMINAL.includes(ticket.status) && (
+            {can('close_ticket') && TERMINAL.includes(ticket.status) && (
               canActOnClosure ? (
                 <button onClick={()=>setReopenOpen(true)}
                   className="flex items-center gap-1.5 px-3 sm:px-4 py-2 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 text-xs font-bold rounded-2xl">
@@ -604,7 +604,7 @@ export default function TicketDetailPage() {
               </div>
 
               {/* PLC type toggle — visible to workers and admins when PLC is required */}
-              {ticket.needs_plc && (isWorker || isAdmin) && (
+              {ticket.needs_plc && (isWorker || can('assign_workers')) && (
                 <div className="mt-4 flex items-center gap-3">
                   <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">PLC Type</p>
                   <div className="flex gap-2">
@@ -653,7 +653,7 @@ export default function TicketDetailPage() {
             </section>
 
             {/* Worker Billing — admin sees full audit; worker sees a slim summary of THEIR row */}
-            {isAdmin ? (
+            {can('view_billing') ? (
               <AdminBillingSection ticket={ticket} billing={billing} onChange={load}/>
             ) : (
               <WorkerBillingSummary svcUserId={svcUser?.id} billing={billing} ticketId={ticketId}/>
@@ -706,7 +706,7 @@ export default function TicketDetailPage() {
       </main>
 
       {/* Reopen modal (admin only) */}
-      {isAdmin && (
+      {can('view_billing') && (
         <ReopenModal
           ticket={reopenOpen ? ticket : null}
           open={reopenOpen}

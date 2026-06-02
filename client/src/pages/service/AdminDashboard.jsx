@@ -1,4 +1,5 @@
 import { createPortal } from 'react-dom';
+import PermissionsPage from './PermissionsPage';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import svcApi from '../../serviceApi';
@@ -1463,25 +1464,28 @@ function ReportsTab() {
 /* ─── MAIN DASHBOARD                                          ─── */
 /* ═══════════════════════════════════════════════════════════════ */
 export default function AdminDashboard() {
-  const { svcUser, svcLogout, isSuperAdmin, isSales } = useSvcAuth();
+  const { svcUser, svcLogout, isSuperAdmin, isSales, can } = useSvcAuth();
   const navigate = useNavigate();
   const { tab: urlTab } = useParams();
 
-  const VALID_TABS = ['overview','tickets','workers','reports','profitability','users','sessions','tasks'];
+  const VALID_TABS = ['overview','tickets','workers','reports','profitability','users','sessions','tasks','permissions'];
   const tab = VALID_TABS.includes(urlTab) ? urlTab : 'overview';
   const setTab = useCallback((newTab) => navigate(`/service/admin/${newTab}`), [navigate]);
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
 
   useEffect(() => {
-    const superOnly = ['users','sessions'];
-    const salesOk   = ['reports','profitability'];
-    if (!isSuperAdmin && superOnly.includes(tab)) {
+    const tabPerms = {
+      reports:       'view_reports',
+      profitability: 'view_profitability',
+      users:         'manage_users',
+      sessions:      'view_sessions',
+      permissions:   'manage_users',
+    };
+    const required = tabPerms[tab];
+    if (required && !can(required)) {
       navigate('/service/admin/overview', { replace: true });
     }
-    if (!isSuperAdmin && !isSales && salesOk.includes(tab)) {
-      navigate('/service/admin/overview', { replace: true });
-    }
-  }, [tab, isSuperAdmin, isSales, navigate]);
+  }, [tab, can, isSuperAdmin, navigate]);
 
   const [tickets,setTickets]   = useState([]);
   const [workers,setWorkers]   = useState([]);
@@ -1511,15 +1515,16 @@ export default function AdminDashboard() {
 
   const loadTickets  = useCallback(async()=>{try{const p={};if(filters.status!=='All')p.status=filters.status;if(filters.priority!=='All')p.priority=filters.priority;if(filters.service_type!=='All')p.service_type=filters.service_type;if(filters.search)p.search=filters.search;const{data}=await svcApi.get('/tickets',{params:p});setTickets(data);}catch(e){console.error(e);}},[filters]);
   const loadWorkers  = useCallback(async()=>{try{const{data}=await svcApi.get('/auth/workers');setWorkers(data);}catch(e){console.error(e);}},[]);
-  const loadAllUsers = useCallback(async()=>{if(!isSuperAdmin)return;try{const{data}=await svcApi.get('/auth/all-users');setAllUsers(data);}catch(e){console.error(e);}},[isSuperAdmin]);
+  const loadAllUsers = useCallback(async()=>{if(!can('manage_users'))return;try{const{data}=await svcApi.get('/auth/all-users');setAllUsers(data);}catch(e){console.error(e);}},[can]);
   const loadSessions = useCallback(async()=>{try{const{data}=await svcApi.get('/sessions/all');setSessions(data);}catch(e){console.error(e);}},[]);
 
   useEffect(()=>{loadTickets();},[loadTickets]);
   useEffect(()=>{
     loadWorkers();
     loadSessions();
-    if (isSuperAdmin) loadAllUsers();
-  },[loadWorkers, loadSessions, loadAllUsers, isSuperAdmin]);
+    if (can('manage_users')) loadAllUsers();
+    if (can('view_sessions')) loadSessions();
+  },[loadWorkers, loadSessions, loadAllUsers, can]);
 
   const [reminderCount, setReminderCount] = useState(0);
 useEffect(() => {
@@ -1655,16 +1660,13 @@ const wireW = workers.filter(w => w.role === 'wireman' || (w.role === 'admin' &&
   const NAV = [
     {k:'overview', icon:I.home,     label:'Overview'},
     {k:'tickets',  icon:I.ticket,   label:'Tickets', badge:counts.unassigned||null},
-    {k:'tasks', icon:I.tasks || I.ticket, label:'Tasks'},
+    {k:'tasks',    icon:I.tasks || I.ticket, label:'Tasks'},
     {k:'workers',  icon:I.workers,  label:'Workers'},
-    ...((isSuperAdmin)?[
-      {k:'reports',       icon:I.reports,  label:'Reports'},
-      {k:'profitability', icon:I.profit,   label:'Profitability'},
-    ]:[]),
-    ...(isSuperAdmin?[
-      {k:'users',         icon:I.users,    label:'Users'},
-      {k:'sessions',      icon:I.sessions, label:'Sessions', badge:liveCount||null},
-    ]:[]),
+    ...(can('view_reports')       ? [{k:'reports',       icon:I.reports,  label:'Reports'}]        : []),
+    ...(can('view_profitability') ? [{k:'profitability', icon:I.profit,   label:'Profitability'}]  : []),
+    ...(can('manage_users')       ? [{k:'users',         icon:I.users,    label:'Users'}]           : []),
+    ...(can('view_sessions')      ? [{k:'sessions',      icon:I.sessions, label:'Sessions', badge:liveCount||null}] : []),
+    ...(can('manage_users')       ? [{k:'permissions',   icon:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>, label:'Permissions'}] : []),
   ];
 
   return (
@@ -1853,7 +1855,8 @@ const wireW = workers.filter(w => w.role === 'wireman' || (w.role === 'admin' &&
                     {[
                       ['+ New Inquiry','Raise a service ticket',()=>window.open('/service','_blank')],
                       ['All Tickets',`${counts.unassigned} unassigned`,()=>setTab('tickets')],
-                      ...(isSuperAdmin?[['Reports','Analytics & exports',()=>setTab('reports')],['Manage Users',`${allUsers.length} users`,()=>setTab('users')]]:[])
+                      ...(can('view_reports')?[['Reports','Analytics & exports',()=>setTab('reports')]]:[]),
+                      ...(can('manage_users')?[['Manage Users',`${allUsers.length} users`,()=>setTab('users')]]:[]),
                     ].map(([l,sub,fn],i)=>(
                       <button key={i} onClick={fn} className="w-full flex items-center gap-3 px-2 py-2 rounded-2xl hover:bg-slate-50 transition-all text-left group">
                         <div className="w-8 h-8 rounded-xl bg-slate-100 group-hover:bg-blue-100 group-hover:text-blue-600 flex items-center justify-center text-slate-600 transition-all">→</div>
@@ -1998,7 +2001,7 @@ const wireW = workers.filter(w => w.role === 'wireman' || (w.role === 'admin' &&
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs">
   <thead className="bg-slate-50/50 border-b border-slate-100">
-    <tr>{[...['Worker','Role','Department','Phone'], ...(isSuperAdmin?['Salary/mo']:[]), ...(isSuperAdmin||isSales?['IRC/day']:[]), 'Status'].map(h=><th key={h} className="text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider px-4 py-3">{h}</th>)}</tr>
+    <tr>{[...['Worker','Role','Department','Phone'], ...(can('view_salary')?['Salary/mo']:[]), ...(can('view_irc')?['IRC/day']:[]), 'Status'].map(h=><th key={h} className="text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider px-4 py-3">{h}</th>)}</tr>
   </thead>
   <tbody className="divide-y divide-slate-100">
     {workers.length===0 ? (
@@ -2035,8 +2038,8 @@ const wireW = workers.filter(w => w.role === 'wireman' || (w.role === 'admin' &&
           </td>
           <td className="px-4 py-3 text-slate-600">{w.department||'—'}</td>
           <td className="px-4 py-3 text-slate-600 font-mono">{w.phone}</td>
-          {isSuperAdmin && <td className="px-4 py-3 text-slate-600 font-mono text-xs">{w.monthly_salary?`₹${Number(w.monthly_salary).toLocaleString('en-IN')}`:'—'}</td>}
-          {(isSuperAdmin||isSales) && <td className="px-4 py-3 text-slate-600 font-mono text-xs">{w.irc_daily_rate?`₹${Number(w.irc_daily_rate).toLocaleString('en-IN')}`:'—'}</td>}
+          {can('view_salary') && <td className="px-4 py-3 text-slate-600 font-mono text-xs">{w.monthly_salary?`₹${Number(w.monthly_salary).toLocaleString('en-IN')}`:'—'}</td>}
+          {can('view_irc') && <td className="px-4 py-3 text-slate-600 font-mono text-xs">{w.irc_daily_rate?`₹${Number(w.irc_daily_rate).toLocaleString('en-IN')}`:'—'}</td>}
           <td className="px-4 py-3">
             <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-emerald-700">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"/>
@@ -2056,7 +2059,7 @@ const wireW = workers.filter(w => w.role === 'wireman' || (w.role === 'admin' &&
           {/* ═══════════════════════════════════ */}
           {/* REPORTS TAB                         */}
           {/* ═══════════════════════════════════ */}
-          {tab==='reports' && isSuperAdmin && (
+          {tab==='reports' && can('view_reports') && (
             <div className="p-5 lg:p-7">
               <ReportsTab/>
             </div>
@@ -2065,7 +2068,7 @@ const wireW = workers.filter(w => w.role === 'wireman' || (w.role === 'admin' &&
           {/* ═══════════════════════════════════ */}
           {/* PROFITABILITY TAB                   */}
           {/* ═══════════════════════════════════ */}
-          {tab==='profitability' && isSuperAdmin && (
+          {tab==='profitability' && can('view_profitability') && (
             <div className="p-5 lg:p-7">
               <ProfitabilityTab/>
             </div>
@@ -2074,7 +2077,12 @@ const wireW = workers.filter(w => w.role === 'wireman' || (w.role === 'admin' &&
           {/* ═══════════════════════════════════ */}
           {/* USERS TAB                           */}
           {/* ═══════════════════════════════════ */}
-          {tab==='users' && isSuperAdmin && (
+          {tab==='permissions' && can('manage_users') && (
+            <div className="flex-1 overflow-hidden h-full">
+              <PermissionsPage />
+            </div>
+          )}
+          {tab==='users' && can('manage_users') && (
             <div className="p-5 lg:p-7 space-y-4">
               <div className="bg-white rounded-3xl border border-slate-200/60 overflow-hidden">
                 <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between flex-wrap gap-3">
@@ -2161,7 +2169,7 @@ const wireW = workers.filter(w => w.role === 'wireman' || (w.role === 'admin' &&
           {/* ═══════════════════════════════════ */}
           {/* SESSIONS TAB                        */}
           {/* ═══════════════════════════════════ */}
-          {tab==='sessions' && isSuperAdmin && (
+          {tab==='sessions' && can('view_sessions') && (
             <div className="p-5 lg:p-7 space-y-4">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 {[

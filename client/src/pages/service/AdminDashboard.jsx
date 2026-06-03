@@ -1472,6 +1472,7 @@ export default function AdminDashboard() {
   const tab = VALID_TABS.includes(urlTab) ? urlTab : 'overview';
   const setTab = useCallback((newTab) => navigate(`/service/admin/${newTab}`), [navigate]);
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(null); // ticket to delete
 
   useEffect(() => {
     const tabPerms = {
@@ -1514,6 +1515,22 @@ export default function AdminDashboard() {
   };
 
   const loadTickets  = useCallback(async()=>{try{const p={};if(filters.status!=='All')p.status=filters.status;if(filters.priority!=='All')p.priority=filters.priority;if(filters.service_type!=='All')p.service_type=filters.service_type;if(filters.search)p.search=filters.search;const{data}=await svcApi.get('/tickets',{params:p});setTickets(data);}catch(e){console.error(e);}},[filters]);
+  const deleteTicket = useCallback((tk) => {
+    setDeleteConfirm(tk);
+  }, []);
+
+  const confirmDelete = useCallback(async () => {
+    if (!deleteConfirm) return;
+    try {
+      await svcApi.delete(`/tickets/${deleteConfirm.id}`);
+      setDeleteConfirm(null);
+      loadTickets();
+    } catch (e) {
+      alert(e.response?.data?.error || 'Failed to delete ticket');
+      setDeleteConfirm(null);
+    }
+  }, [deleteConfirm]);
+
   const loadWorkers  = useCallback(async()=>{try{const{data}=await svcApi.get('/auth/workers');setWorkers(data);}catch(e){console.error(e);}},[]);
   const loadAllUsers = useCallback(async()=>{if(!can('manage_users'))return;try{const{data}=await svcApi.get('/auth/all-users');setAllUsers(data);}catch(e){console.error(e);}},[can]);
   const loadSessions = useCallback(async()=>{try{const{data}=await svcApi.get('/sessions/all');setSessions(data);}catch(e){console.error(e);}},[]);
@@ -1657,7 +1674,7 @@ const wireW = workers.filter(w => w.role === 'wireman' || (w.role === 'admin' &&
   };
   const liveCount = sessions.filter(s=>s.status==='running').length;
 
-  const NAV = [
+  const NAV = React.useMemo(() => [
     {k:'overview', icon:I.home,     label:'Overview'},
     {k:'tickets',  icon:I.ticket,   label:'Tickets', badge:counts.unassigned||null},
     {k:'tasks',    icon:I.tasks || I.ticket, label:'Tasks'},
@@ -1667,7 +1684,7 @@ const wireW = workers.filter(w => w.role === 'wireman' || (w.role === 'admin' &&
     ...(can('manage_users')       ? [{k:'users',         icon:I.users,    label:'Users'}]           : []),
     ...(can('view_sessions')      ? [{k:'sessions',      icon:I.sessions, label:'Sessions', badge:liveCount||null}] : []),
     ...(can('manage_users')       ? [{k:'permissions',   icon:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>, label:'Permissions'}] : []),
-  ];
+  ], [can, counts.unassigned, liveCount]);
 
   return (
     <div className="flex h-screen bg-[#F5F6F8] font-sans overflow-hidden">
@@ -1969,6 +1986,9 @@ const wireW = workers.filter(w => w.role === 'wireman' || (w.role === 'admin' &&
                                 {!isDone && <button onClick={()=>openAssign(tk)} className="text-[11px] font-bold px-3 py-1.5 rounded-lg bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 mr-1.5">Assign</button>}
                                 {isDone && <button onClick={()=>setReopenM(tk)} className="text-[11px] font-bold px-3 py-1.5 rounded-lg bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 mr-1.5">Reopen</button>}
                                 <Link to={`/service/admin/tickets/${tk.ticket_id}`} className="text-[11px] font-semibold px-3 py-1.5 rounded-lg bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100">View</Link>
+                                {can('delete_ticket') && (
+                                  <button onClick={()=>deleteTicket(tk)} className="text-[11px] font-bold px-3 py-1.5 rounded-lg bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 ml-1.5">Delete</button>
+                                )}
                               </td>
                               {/* <td className="px-4 py-3.5 whitespace-nowrap">
                                 {!isDone && <button onClick={()=>openAssign(tk)} className="text-[11px] font-bold px-3 py-1.5 rounded-lg bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 mr-1.5">Assign</button>}
@@ -2282,6 +2302,37 @@ const wireW = workers.filter(w => w.role === 'wireman' || (w.role === 'admin' &&
         </div>
       </nav>
 
+      {/* ════ DELETE CONFIRMATION MODAL ════ */}
+      {deleteConfirm && createPortal(
+        <>
+          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[90]" onClick={()=>setDeleteConfirm(null)}/>
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6">
+              <div className="w-12 h-12 rounded-2xl bg-red-100 flex items-center justify-center mb-4 mx-auto">
+                <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>
+                </svg>
+              </div>
+              <h3 className="text-base font-black text-slate-900 text-center mb-1">Delete Ticket?</h3>
+              <p className="text-xs text-slate-500 text-center mb-1">
+                <span className="font-mono font-bold text-blue-600">{deleteConfirm.ticket_id}</span> · {deleteConfirm.customer_name}
+              </p>
+              <p className="text-[11px] text-red-500 text-center mb-5">This will permanently delete the ticket and all related data. This cannot be undone.</p>
+              <div className="flex gap-3">
+                <button onClick={()=>setDeleteConfirm(null)}
+                  className="flex-1 py-2.5 border border-slate-200 text-slate-700 text-sm font-bold rounded-2xl hover:bg-slate-50 transition-all">
+                  Cancel
+                </button>
+                <button onClick={confirmDelete}
+                  className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white text-sm font-bold rounded-2xl transition-all">
+                  Yes, Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        </>,
+        document.body
+      )}
       {/* More drawer portal */}
       {mobileMoreOpen && createPortal(
         <>

@@ -1,9 +1,10 @@
 const router  = require('express').Router();
 const pool    = require('../db/pool');
 const svcAuth = require('../middleware/serviceAuth');
+const svcPerm = require('../middleware/servicePermission');
 
 // ── POST /api/service/sessions/start ─────────────────────────────────────
-router.post('/start', svcAuth(['plc','wireman']), async (req, res) => {
+router.post('/start', svcAuth(['plc','wireman','admin','superadmin']), svcPerm('start_timer'), async (req, res) => {
   const { ticket_id } = req.body;
   if (!ticket_id) return res.status(400).json({ error: 'ticket_id required' });
   const workerId = req.svcUser.id;
@@ -27,7 +28,7 @@ router.post('/start', svcAuth(['plc','wireman']), async (req, res) => {
 });
 
 // ── POST /api/service/sessions/:id/pause ─────────────────────────────────
-// router.post('/:id/pause', svcAuth(['plc','wireman']), async (req, res) => {
+// router.post('/:id/pause', svcAuth(['plc','wireman','admin','superadmin']), svcPerm('start_timer'), async (req, res) => {
 //   const { reason } = req.body;
 //   if (!reason?.trim()) return res.status(400).json({ error: 'Reason required' });
 //   const client = await pool.connect();
@@ -46,33 +47,9 @@ router.post('/start', svcAuth(['plc','wireman']), async (req, res) => {
 //   finally { client.release(); }
 // });
 
-router.post('/:id/pause', svcAuth(['plc','wireman']), async (req, res) => {
-  const { reason, reason_category } = req.body;
-  if (!reason?.trim()) return res.status(400).json({ error: 'Reason required' });
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    const { rows: sess } = await client.query(`SELECT * FROM work_sessions WHERE id=$1 AND worker_id=$2`, [req.params.id, req.svcUser.id]);
-    if (!sess.length) return res.status(404).json({ error: 'Not found' });
-    if (sess[0].status !== 'running') return res.status(400).json({ error: 'Not running' });
-    const elapsed = Math.floor((Date.now() - new Date(sess[0].started_at).getTime()) / 1000);
-    await client.query(`UPDATE work_sessions SET status='paused', total_seconds=total_seconds+$1 WHERE id=$2`, [elapsed, req.params.id]);
-    const { rows: pause } = await client.query(
-      `INSERT INTO session_pauses (session_id, paused_at, reason, reason_category) VALUES ($1, NOW(), $2, $3) RETURNING *`,
-      [req.params.id, reason.trim(), reason_category || 'other']
-    );
-    await client.query('COMMIT');
-    req.io?.to('admins').emit('session:paused', {
-      sessionId: req.params.id, reason: reason.trim(), reason_category: reason_category||'other',
-      worker: req.svcUser.name, ticket_id: sess[0].ticket_id
-    });
-    res.json({ session: { ...sess[0], status:'paused', total_seconds: sess[0].total_seconds+elapsed }, pause: pause[0] });
-  } catch (e) { await client.query('ROLLBACK'); res.status(500).json({ error: e.message }); }
-  finally { client.release(); }
-});
 
 // ── POST /api/service/sessions/:id/resume ────────────────────────────────
-router.post('/:id/resume', svcAuth(['plc','wireman']), async (req, res) => {
+router.post('/:id/resume', svcAuth(['plc','wireman','admin','superadmin']), svcPerm('start_timer'), async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -89,7 +66,7 @@ router.post('/:id/resume', svcAuth(['plc','wireman']), async (req, res) => {
 });
 
 // ── POST /api/service/sessions/:id/stop ──────────────────────────────────
-router.post('/:id/stop', svcAuth(['plc','wireman']), async (req, res) => {
+router.post('/:id/stop', svcAuth(['plc','wireman','admin','superadmin']), svcPerm('start_timer'), async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -109,7 +86,7 @@ router.post('/:id/stop', svcAuth(['plc','wireman']), async (req, res) => {
 });
 
 // ── GET /api/service/sessions/my ─────────────────────────────────────────
-router.get('/my', svcAuth(['plc','wireman']), async (req, res) => {
+router.get('/my', svcAuth(['plc','wireman','admin','superadmin']), async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT ws.*, st.ticket_id AS ticket_no, st.customer_name, st.service_type,
@@ -128,7 +105,7 @@ router.get('/my', svcAuth(['plc','wireman']), async (req, res) => {
 
 // ── GET /api/service/sessions/active ─────────────────────────────────────
 // Returns ALL of this worker's running + paused sessions (concurrent timers).
-router.get('/active', svcAuth(['plc','wireman']), async (req, res) => {
+router.get('/active', svcAuth(['plc','wireman','admin','superadmin']), async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT ws.*, st.ticket_id AS ticket_no, st.customer_name, st.service_type, st.id AS svc_ticket_id
@@ -138,33 +115,6 @@ router.get('/active', svcAuth(['plc','wireman']), async (req, res) => {
       [req.svcUser.id]
     );
     res.json(rows);   // ← array now, not a single object
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-// router.get('/active', svcAuth(['plc','wireman']), async (req, res) => {
-//   try {
-//     const { rows } = await pool.query(
-//       `SELECT ws.*, st.ticket_id AS ticket_no, st.customer_name, st.service_type, st.id AS svc_ticket_id
-//        FROM work_sessions ws JOIN service_tickets st ON st.id=ws.ticket_id
-//        WHERE ws.worker_id=$1 AND ws.status IN ('running','paused')
-//        ORDER BY ws.created_at DESC LIMIT 1`,
-//       [req.svcUser.id]
-//     );
-//     res.json(rows[0] || null);
-//   } catch (e) { res.status(500).json({ error: e.message }); }
-// });
-
-// ── GET /api/service/sessions/all ────────────────────────────────────────
-router.get('/all', svcAuth(['superadmin','admin']), async (req, res) => {
-  try {
-    const { rows } = await pool.query(
-      `SELECT ws.*, su.name AS worker_name, su.role AS worker_role,
-         st.ticket_id AS ticket_no, st.customer_name, st.service_type
-       FROM work_sessions ws
-       JOIN service_users su ON su.id=ws.worker_id
-       JOIN service_tickets st ON st.id=ws.ticket_id
-       ORDER BY ws.created_at DESC LIMIT 500`
-    );
-    res.json(rows);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

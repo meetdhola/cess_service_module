@@ -1,9 +1,9 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import svcApi from '../serviceApi';
 
 const SvcAuthCtx = createContext(null);
 
-// Permission defaults per role (mirrors server/permissions.js)
+// Must match server/permissions.js exactly
 const ROLE_DEFAULTS = {
   superadmin: [
     'view_reports','view_profitability','view_salary','view_irc','export_reports',
@@ -25,64 +25,77 @@ const ROLE_DEFAULTS = {
 };
 
 export function SvcAuthProvider({ children }) {
-  const [svcUser,      setSvcUser]      = useState(null);
-  const [svcReady,     setSvcReady]     = useState(false);
-  const [permissions,  setPermissions]  = useState([]);
-  const [permsLoaded,  setPermsLoaded]  = useState(false);
-
-  // Load user from localStorage on mount
-  useEffect(() => {
-    const saved = localStorage.getItem('svc_user');
-    if (saved) {
-      const user = JSON.parse(saved);
-      setSvcUser(user);
-      loadPermissions(user);
-    }
-    setSvcReady(true);
-  }, []);
+  const [svcUser,     setSvcUser]     = useState(null);
+  const [svcReady,    setSvcReady]    = useState(false);
+  const [permissions, setPermissions] = useState([]);
+  const [permsLoaded, setPermsLoaded] = useState(false);
+  const userRef = useRef(null);
 
   const loadPermissions = useCallback(async (user) => {
     if (!user) { setPermissions([]); setPermsLoaded(true); return; }
-    // Start with role defaults immediately (no flicker)
+    // Apply role defaults immediately (no flicker)
     const defaults = ROLE_DEFAULTS[user.role] || [];
     setPermissions(defaults);
     try {
       const { data } = await svcApi.get('/permissions/mine');
       setPermissions(data.permissions || defaults);
     } catch {
-      // Fall back to role defaults if API fails
       setPermissions(defaults);
     } finally {
       setPermsLoaded(true);
     }
   }, []);
 
-  const svcLogin = (token, userData) => {
+  // Load on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('svc_user');
+    if (saved) {
+      const user = JSON.parse(saved);
+      userRef.current = user;
+      setSvcUser(user);
+      loadPermissions(user);
+    }
+    setSvcReady(true);
+  }, [loadPermissions]);
+
+  // Refresh every 30s so permission changes take effect without re-login
+  useEffect(() => {
+    if (!svcUser) return;
+    userRef.current = svcUser;
+    const interval = setInterval(() => {
+      if (userRef.current) loadPermissions(userRef.current);
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [svcUser, loadPermissions]);
+
+  const svcLogin = useCallback((token, userData) => {
     localStorage.setItem('svc_token', token);
     localStorage.setItem('svc_user', JSON.stringify(userData));
+    userRef.current = userData;
     setSvcUser(userData);
     loadPermissions(userData);
-  };
+  }, [loadPermissions]);
 
-  const svcLogout = () => {
+  const svcLogout = useCallback(() => {
     localStorage.removeItem('svc_token');
     localStorage.removeItem('svc_user');
+    userRef.current = null;
     setSvcUser(null);
     setPermissions([]);
     setPermsLoaded(false);
-  };
+  }, []);
 
-  // Core permission check
+  // can() — checks if user has permission
+  // Superadmin always returns true regardless of DB
   const can = useCallback((permission) => {
     if (!svcUser) return false;
-    // Superadmin always has everything
     if (svcUser.role === 'superadmin') return true;
     return permissions.includes(permission);
   }, [permissions, svcUser]);
 
   const canAny = useCallback((...perms) => perms.some(p => can(p)), [can]);
 
-  // Convenience role flags (kept for backward compat)
+  // Convenience flags (backward compat)
   const isSuperAdmin = svcUser?.role === 'superadmin';
   const isSales      = svcUser?.role === 'admin' && (svcUser?.department || '').toLowerCase().includes('sales');
   const isAdmin      = svcUser?.role === 'admin' || isSuperAdmin;
@@ -91,7 +104,7 @@ export function SvcAuthProvider({ children }) {
   return (
     <SvcAuthCtx.Provider value={{
       svcUser, svcLogin, svcLogout, svcReady,
-      permissions, permsLoaded,
+      permissions, permsLoaded, loadPermissions,
       can, canAny,
       isSuperAdmin, isSales, isAdmin, isWorker,
     }}>

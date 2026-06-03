@@ -4,6 +4,7 @@ const path    = require('path');
 const fs      = require('fs');
 const pool    = require('../db/pool');
 const svcAuth = require('../middleware/serviceAuth');
+const svcPerm = require('../middleware/servicePermission');
 const profit = require('./serviceProfitability');  
 const { notify } = require('./serviceNotifications');
 
@@ -76,7 +77,7 @@ router.post('/:id/media', upload.array('files', 10), async (req, res) => {
 });
 
 /* ─── GET /api/service/tickets — list (admin) ─── */
-router.get('/', svcAuth(['admin','superadmin']), async (req, res) => {
+router.get('/', svcAuth(['admin','superadmin']), svcPerm('view_all_tickets'), async (req, res) => {
   const { status, priority, service_type, search } = req.query;
   const where = []; const args = []; let n = 1;
   if (status      && status      !== 'All') { where.push(`t.status=$${n++}`);       args.push(status); }
@@ -160,7 +161,7 @@ router.get('/:id', svcAuth(), async (req, res) => {
 });
 
 /* ─── PATCH /api/service/tickets/:id/assign — multi-assign ─── */
-router.patch('/:id/assign', svcAuth(['admin','superadmin']), async (req, res) => {
+router.patch('/:id/assign', svcAuth(['admin','superadmin']), svcPerm('assign_workers'), async (req, res) => {
   const { plc_ids = [], wireman_ids = [] } = req.body;
   // Backwards-compat: also accept old single-id payload
   const plcArr = Array.isArray(plc_ids) ? plc_ids : (req.body.assigned_plc ? [req.body.assigned_plc] : []);
@@ -237,7 +238,7 @@ router.patch('/:id/assign', svcAuth(['admin','superadmin']), async (req, res) =>
 });
 
 /* ─── PATCH /api/service/tickets/:id/status ─── */
-router.patch('/:id/status', svcAuth(), async (req, res) => {
+router.patch('/:id/status', svcAuth(['admin','superadmin']), svcPerm('assign_workers'), async (req, res) => {
   try {
     const { rows } = await pool.query(`UPDATE service_tickets SET status=$1, updated_at=NOW() WHERE id=$2 RETURNING *`,
       [req.body.status, req.params.id]);
@@ -262,7 +263,7 @@ router.patch('/:id/status', svcAuth(), async (req, res) => {
    Admins/superadmins can complete regardless.
    Ticket auto-marks 'Completed' when every assigned worker has both a
    completed work_session AND a completion report (or it's warranty). */
-router.patch('/:id/complete', svcAuth(['plc','wireman']), async (req, res) => {
+router.patch('/:id/complete', svcAuth(['plc','wireman','admin','superadmin']), svcPerm('start_timer'), async (req, res) => {
   try {
     const ticketId = req.params.id;
     const { rows: tk } = await pool.query(
@@ -320,7 +321,7 @@ router.patch('/:id/complete', svcAuth(['plc','wireman']), async (req, res) => {
   }
 });
 
-router.patch('/:id/close', svcAuth(['admin','superadmin']), async (req, res) => {
+router.patch('/:id/close', svcAuth(['admin','superadmin']), svcPerm('close_ticket'), async (req, res) => {
   try {
     const ticketId = req.params.id;
     const { rows: tk } = await pool.query(
@@ -408,7 +409,7 @@ router.patch('/:id/close', svcAuth(['admin','superadmin']), async (req, res) => 
 /* ─── INVOICE / CHALLAN ─── */
 /* ════════════════════════════════════════════════════════════ */
 
-router.patch('/:id/invoice', svcAuth(), async (req, res) => {
+router.patch('/:id/invoice', svcAuth(['admin','superadmin']), svcPerm('enter_billing'), async (req, res) => {
   const invoice_no = req.body.invoice_no?.toString().trim() || null;
   try {
     const { rows } = await pool.query(
@@ -585,7 +586,7 @@ router.get('/:id/team-progress', svcAuth(), async (req, res) => {
 // POST /api/service/tickets/:id/worker-billing
 // The assigned worker submits their charged amount (one entry per worker per ticket)
 // Workers can only create/update their OWN entry, and only if ticket is not yet 'Completed'
-router.post('/:id/worker-billing', svcAuth(['plc','wireman']), async (req, res) => {
+router.post('/:id/worker-billing', svcAuth(['plc','wireman','admin','superadmin']), svcPerm('upload_files'), async (req, res) => {
   const { charged_amount, charged_note } = req.body;
 
   // Validation
@@ -813,7 +814,7 @@ router.post('/:id/self-assign', svcAuth(['plc','wireman','admin','superadmin']),
 
 /* ─── GET /:id/rate-suggestion ─── */
 /* Returns per-worker rate card suggestion + expense/report info  */
-router.get('/:id/rate-suggestion', svcAuth(['admin','superadmin']), async (req, res) => {
+router.get('/:id/rate-suggestion', svcAuth(['admin','superadmin']), svcPerm('view_billing'), async (req, res) => {
   try {
     // Resolve UUID or human ticket number
     const idParam = req.params.id;
@@ -929,6 +930,21 @@ router.get('/:id/rate-suggestion', svcAuth(['admin','superadmin']), async (req, 
     res.json({ ticket_id: id, workers: result });
   } catch (e) {
     console.error('Rate suggestion error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+
+/* DELETE /api/service/tickets/:id — superadmin only */
+router.delete('/:id', svcAuth(['superadmin']), svcPerm('delete_ticket'), async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `DELETE FROM service_tickets WHERE id=$1::uuid RETURNING ticket_id`,
+      [req.params.id]);
+    if (!rows.length) return res.status(404).json({ error: 'Ticket not found' });
+    res.json({ ok: true, ticket_id: rows[0].ticket_id });
+  } catch (e) {
+    console.error('Delete ticket error:', e);
     res.status(500).json({ error: e.message });
   }
 });

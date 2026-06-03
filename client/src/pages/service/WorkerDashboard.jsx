@@ -72,7 +72,7 @@ const ICONS = {
 };
 
 function WorkerCommandBar({ items, currentTab, onTabChange, active, elapsed }) {
-  const { svcLogout } = useSvcAuth();
+  const { svcLogout, can } = useSvcAuth();
   const status = active?.status; // 'running' | 'paused' | undefined
   const prevActive = useRef(active);
 
@@ -134,7 +134,7 @@ function WorkerCommandBar({ items, currentTab, onTabChange, active, elapsed }) {
 
         {/* ── TIMER HERO BUTTON ── */}
         <button
-          onClick={() => onTabChange('timer')}
+          onClick={() => can('start_timer') ? onTabChange('timer') : null}
           className="absolute left-1/2 -translate-x-1/2 -top-9 z-10 group select-none">
           <div className="relative">
 
@@ -192,7 +192,7 @@ function WorkerCommandBar({ items, currentTab, onTabChange, active, elapsed }) {
             />
             {/* New Request */}
             <div className="flex flex-col items-center justify-center py-1.5 pr-[10vw]">
-              <Link to="/service" className="flex flex-col items-center gap-0.5 active:scale-90 transition-all">
+              <Link to="/service" className={`flex flex-col items-center gap-0.5 active:scale-90 transition-all ${can('upload_files') ? '' : 'opacity-40 pointer-events-none'}`}>
                 <div className="w-6 h-6 rounded-full bg-slate-800 flex items-center justify-center mb-0.5">
                   <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 </div>
@@ -1042,7 +1042,7 @@ function SessionList({ sessions, elapsed, busy, onPause, onResume, onStop, fmt, 
 
 /* ═══════════════════════════════════════════════════════════════ */
 export default function WorkerDashboard() {
-  const { svcUser, svcLogout } = useSvcAuth();
+  const { svcUser, svcLogout, can, permissions } = useSvcAuth();
   // const [tab,       setTab]       = useState('tasks');
     const navigate = useNavigate();
   const { tab: urlTab } = useParams();

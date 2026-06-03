@@ -1,6 +1,7 @@
 const router  = require('express').Router();
 const pool    = require('../db/pool');
 const svcAuth = require('../middleware/serviceAuth');
+const svcPerm = require('../middleware/servicePermission');
 
 /* ─── Pricing helpers ─── */
 function pickPricing(worker, ticket, pricingRows) {
@@ -193,7 +194,7 @@ function bucketKey(dateStr, granularity) {
 /* ════════════════════════════════════════════════════════════ */
 /* 1. PROFITABILITY OVERVIEW                                    */
 /* ════════════════════════════════════════════════════════════ */
-router.get('/profitability', svcAuth(['superadmin']), async (req, res) => {
+router.get('/profitability', svcAuth(['superadmin','admin']), svcPerm('view_profitability'), async (req, res) => {
   const fromDate = req.query.from || new Date(Date.now() - 30*24*60*60*1000).toISOString().slice(0,10);
   const toDate   = req.query.to   || new Date().toISOString().slice(0,10);
   try {
@@ -253,7 +254,7 @@ res.json({
 /* ════════════════════════════════════════════════════════════ */
 /* 2. USER-WISE REPORT (actual vs IRC vs customer rate)         */
 /* ════════════════════════════════════════════════════════════ */
-router.get('/profitability/user-wise', svcAuth(['superadmin']), async (req,res) => {
+router.get('/profitability/user-wise', svcAuth(['superadmin','admin']), svcPerm('view_profitability'), async (req,res) => {
   const fromDate = req.query.from || new Date(Date.now() - 30*24*60*60*1000).toISOString().slice(0,10);
   const toDate   = req.query.to   || new Date().toISOString().slice(0,10);
   const granularity = req.query.granularity || 'monthly'; // daily|monthly|yearly
@@ -315,7 +316,7 @@ router.get('/profitability/user-wise', svcAuth(['superadmin']), async (req,res) 
 /* ════════════════════════════════════════════════════════════ */
 /* 3. CUSTOMER-WISE REPORT                                      */
 /* ════════════════════════════════════════════════════════════ */
-router.get('/profitability/customer-wise', svcAuth(['superadmin']), async (req,res) => {
+router.get('/profitability/customer-wise', svcAuth(['superadmin','admin']), svcPerm('view_profitability'), async (req,res) => {
   const fromDate = req.query.from || new Date(Date.now() - 30*24*60*60*1000).toISOString().slice(0,10);
   const toDate   = req.query.to   || new Date().toISOString().slice(0,10);
   const granularity = req.query.granularity || 'monthly';
@@ -442,7 +443,7 @@ tb.workers.add(s.worker_name);
 /* ════════════════════════════════════════════════════════════ */
 /* 4. SALES AGENT-WISE REPORT                                   */
 /* ════════════════════════════════════════════════════════════ */
-router.get('/profitability/agent-wise', svcAuth(['superadmin']), async (req,res) => {
+router.get('/profitability/agent-wise', svcAuth(['superadmin','admin']), svcPerm('view_profitability'), async (req,res) => {
   const fromDate = req.query.from || new Date(Date.now() - 30*24*60*60*1000).toISOString().slice(0,10);
   const toDate   = req.query.to   || new Date().toISOString().slice(0,10);
   const granularity = req.query.granularity || 'monthly';
@@ -607,14 +608,14 @@ tt.workers.add(s.worker_name);
 /* ════════════════════════════════════════════════════════════ */
 /* 5. PRICING — list / edit                                     */
 /* ════════════════════════════════════════════════════════════ */
-router.get('/pricing', svcAuth(['superadmin']), async (_req,res) => {
+router.get('/pricing', svcAuth(['superadmin','admin']), svcPerm('edit_rate_card'), async (_req,res) => {
   try {
     const { rows } = await pool.query(`SELECT * FROM service_pricing WHERE active=TRUE ORDER BY service_type, seniority, location`);
     res.json(rows);
   } catch(e) { res.status(500).json({error:e.message}); }
 });
 
-router.patch('/pricing/:id', svcAuth(['superadmin']), async (req,res) => {
+router.patch('/pricing/:id', svcAuth(['superadmin','admin']), svcPerm('edit_rate_card'), async (req,res) => {
   const { per_day_rate, half_day_rate, grade_a_rate, grade_b_rate, grade_c_rate, notes } = req.body;
   try {
     const { rows } = await pool.query(
@@ -636,7 +637,7 @@ router.patch('/pricing/:id', svcAuth(['superadmin']), async (req,res) => {
 /* ════════════════════════════════════════════════════════════ */
 /* 6. WORKERS — list with salary/IRC, and edit                  */
 /* ════════════════════════════════════════════════════════════ */
-router.get('/workers/salaries', svcAuth(['superadmin']), async (_req,res) => {
+router.get('/workers/salaries', svcAuth(['superadmin','admin']), svcPerm('view_salary'), async (_req,res) => {
   try {
     const { rows } = await pool.query(
       `SELECT id, name, phone, role, department, seniority, monthly_salary, working_days, daily_hours, irc_daily_rate, is_active
@@ -647,7 +648,7 @@ router.get('/workers/salaries', svcAuth(['superadmin']), async (_req,res) => {
   } catch(e) { res.status(500).json({error:e.message}); }
 });
 
-router.patch('/workers/:id/salary', svcAuth(['superadmin']), async (req,res) => {
+router.patch('/workers/:id/salary', svcAuth(['superadmin','admin']), svcPerm('view_salary'), async (req,res) => {
   const { monthly_salary, working_days, daily_hours, seniority, irc_daily_rate } = req.body;
   try {
     const { rows } = await pool.query(

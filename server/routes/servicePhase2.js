@@ -18,6 +18,7 @@ const fs      = require('fs');
 const pool    = require('../db/pool');
 const { notify } = require('./serviceNotifications');
 const svcAuth = require('../middleware/serviceAuth');
+const svcPerm = require('../middleware/servicePermission');
 
 // Same uploads dir / disk storage pattern as serviceTickets.js
 const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, '../uploads');
@@ -33,7 +34,7 @@ const upload = multer({ storage, limits: { fileSize: 50*1024*1024 } });
 /* ════════════════════════════════════════════════════════════ */
 
 // CREATE — admin/superadmin only, must link to a ticket
-router.post('/scheduled-tasks', svcAuth(['admin','superadmin']), async (req, res) => {
+router.post('/scheduled-tasks', svcAuth(['admin','superadmin']), svcPerm('create_ticket'), async (req, res) => {
   const { ticket_id, title, notes, due_date, status } = req.body;
   if (!ticket_id || !title?.trim() || !due_date) {
     return res.status(400).json({ error: 'ticket_id, title and due_date are required' });
@@ -106,7 +107,7 @@ router.get('/scheduled-tasks/reminders', svcAuth(), async (req, res) => {
 });
 
 // UPDATE — admin/superadmin (status change or edit)
-router.patch('/scheduled-tasks/:id', svcAuth(['admin','superadmin']), async (req, res) => {
+router.patch('/scheduled-tasks/:id', svcAuth(['admin','superadmin']), svcPerm('create_ticket'), async (req, res) => {
   const { title, notes, due_date, status } = req.body;
   if (status && !['pending','in_process','completed'].includes(status)) {
     return res.status(400).json({ error: 'invalid status' });
@@ -130,7 +131,7 @@ router.patch('/scheduled-tasks/:id', svcAuth(['admin','superadmin']), async (req
 });
 
 // DELETE — admin/superadmin
-router.delete('/scheduled-tasks/:id', svcAuth(['admin','superadmin']), async (req, res) => {
+router.delete('/scheduled-tasks/:id', svcAuth(['admin','superadmin']), svcPerm('create_ticket'), async (req, res) => {
   try {
     await pool.query(`DELETE FROM scheduled_tasks WHERE id=$1`, [req.params.id]);
     res.json({ ok: true });
@@ -354,7 +355,7 @@ router.post('/tickets/:id/notes', svcAuth(), async (req, res) => {
 /* ════════════════════════════════════════════════════════════ */
 
 router.post('/tickets/:id/worker-completion',
-  svcAuth(['plc','wireman']),
+  svcAuth(['plc','wireman','admin','superadmin']), svcPerm('upload_files'),
   upload.fields([
     { name: 'report',       maxCount: 10 },
     { name: 'expense_file', maxCount: 10 },
@@ -432,7 +433,7 @@ router.post('/tickets/:id/worker-completion',
 /*    (Rate Card button is a frontend concern — Phase 3.)        */
 /* ════════════════════════════════════════════════════════════ */
 
-router.patch('/tickets/:id/worker-billing/:workerId/charge', svcAuth(['admin','superadmin']), async (req, res) => {
+router.patch('/tickets/:id/worker-billing/:workerId/charge', svcAuth(['admin','superadmin']), svcPerm('enter_billing'), async (req, res) => {
   const { charged_amount, charged_note } = req.body;
   if (charged_amount === undefined || charged_amount === null) {
     return res.status(400).json({ error: 'charged_amount is required' });
@@ -466,7 +467,7 @@ router.patch('/tickets/:id/worker-billing/:workerId/charge', svcAuth(['admin','s
 /*    Closed/Completed → 'In Progress'. All history preserved.   */
 /* ════════════════════════════════════════════════════════════ */
 
-router.patch('/tickets/:id/reopen', svcAuth(['admin','superadmin']), async (req, res) => {
+router.patch('/tickets/:id/reopen', svcAuth(['admin','superadmin']), svcPerm('reopen_ticket'), async (req, res) => {
   try {
     const { rows: tkts } = await pool.query(
       `SELECT status FROM service_tickets WHERE id=$1`, [req.params.id]);
@@ -598,7 +599,7 @@ router.get('/tickets/:id/full', svcAuth(), async (req, res) => {
    GET  /tickets/:id/worker-files  — get all files for this ticket
    ════════════════════════════════════════════════════════════════ */
 router.post('/tickets/:id/worker-files',
-  svcAuth(['plc','wireman']),
+  svcAuth(['plc','wireman','admin','superadmin']), svcPerm('upload_files'),
   upload.fields([
     { name: 'files', maxCount: 10 },
   ]),

@@ -1,10 +1,11 @@
 const router  = require('express').Router();
 const pool    = require('../db/pool');
 const svcAuth = require('../middleware/serviceAuth');
+const svcPerm = require('../middleware/servicePermission');
 
 // ── GET /api/service/reports/weekly ──────────────────────────────────────
 // Returns 7-day totals per day: { date, total_seconds, session_count }
-router.get('/weekly', svcAuth(['superadmin','admin']), async (req, res) => {
+router.get('/weekly', svcAuth(['superadmin','admin']), svcPerm('view_reports'), async (req, res) => {
   const days = parseInt(req.query.days) || 7;
   try {
     const { rows } = await pool.query(
@@ -32,7 +33,7 @@ router.get('/weekly', svcAuth(['superadmin','admin']), async (req, res) => {
 
 // ── GET /api/service/reports/daily ───────────────────────────────────────
 // Hourly breakdown for a specific date
-router.get('/daily', svcAuth(['superadmin','admin']), async (req, res) => {
+router.get('/daily', svcAuth(['superadmin','admin']), svcPerm('view_reports'), async (req, res) => {
   const date = req.query.date || new Date().toISOString().slice(0, 10);
   try {
     const { rows } = await pool.query(
@@ -58,7 +59,7 @@ router.get('/daily', svcAuth(['superadmin','admin']), async (req, res) => {
 
 // ── GET /api/service/reports/person-wise ─────────────────────────────────
 // Per worker: total_seconds, session_count, ticket_count, avg_session, pauses
-router.get('/person-wise', svcAuth(['superadmin','admin']), async (req, res) => {
+router.get('/person-wise', svcAuth(['superadmin','admin']), svcPerm('view_reports'), async (req, res) => {
   const { from, to } = req.query;
   const fromDate = from || new Date(Date.now() - 30*24*60*60*1000).toISOString().slice(0,10);
   const toDate   = to   || new Date().toISOString().slice(0,10);
@@ -88,7 +89,7 @@ router.get('/person-wise', svcAuth(['superadmin','admin']), async (req, res) => 
 
 // ── GET /api/service/reports/person-detail/:workerId ─────────────────────
 // Day-wise sessions for one worker
-router.get('/person-detail/:workerId', svcAuth(['superadmin','admin']), async (req, res) => {
+router.get('/person-detail/:workerId', svcAuth(['superadmin','admin']), svcPerm('view_reports'), async (req, res) => {
   const { from, to } = req.query;
   const fromDate = from || new Date(Date.now() - 30*24*60*60*1000).toISOString().slice(0,10);
   const toDate   = to   || new Date().toISOString().slice(0,10);
@@ -112,7 +113,7 @@ router.get('/person-detail/:workerId', svcAuth(['superadmin','admin']), async (r
 });
 
 /* ─── GET /api/service/reports/pause-analytics ─── */
-router.get('/pause-analytics', svcAuth(['superadmin','admin']), async (req, res) => {
+router.get('/pause-analytics', svcAuth(['superadmin','admin']), svcPerm('view_reports'), async (req, res) => {
   const { from, to } = req.query;
   const fromDate = from || new Date(Date.now() - 30*24*60*60*1000).toISOString().slice(0,10);
   const toDate   = to   || new Date().toISOString().slice(0,10);

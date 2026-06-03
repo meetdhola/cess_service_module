@@ -32,20 +32,26 @@ router.post('/', async (req, res) => {
     const { rows: c } = await client.query(
       `UPDATE ticket_counters SET last_num=last_num+1 WHERE prefix=$1 RETURNING last_num`, [prefix]);
     const ticket_id = `${prefix}${String(c[0].last_num).padStart(4,'0')}`;
+    // Validate PLC or wiring required
+    if (!b.needs_plc && !b.needs_wiring) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'At least one of PLC Engineer or Wireman is required' });
+    }
     const { rows } = await client.query(
       `INSERT INTO service_tickets
         (ticket_id, service_type, customer_name, address, description, priority,
          contact_name, contact_phone, designation, sales_agent,
          needs_plc, needs_wiring, plc_type,
-         warranty_status, invoice_no, invoice_date, challan_no, challan_date)
-       VALUES ($1,$2,$3,$4,$5,$6, $7,$8,$9,$10, $11,$12,$13, $14,$15,$16,$17,$18)
+         warranty_status, invoice_no, invoice_date, challan_no, challan_date, deadline_date)
+       VALUES ($1,$2,$3,$4,$5,$6, $7,$8,$9,$10, $11,$12,$13, $14,$15,$16,$17,$18,$19)
        RETURNING *`,
       [ticket_id, b.service_type, b.customer_name.trim(), b.address.trim(), b.description||null, b.priority||'Medium',
        b.contact_name||null, b.contact_phone||null, b.designation||null, b.sales_agent||null,
        !!b.needs_plc, !!b.needs_wiring, b.plc_type||null,
        b.warranty_status||'in_warranty',
        b.invoice_no||null, b.invoice_no?new Date():null,
-       b.challan_no||null, b.challan_no?new Date():null]
+       b.challan_no||null, b.challan_no?new Date():null,
+       b.deadline_date||null]
     );
     await client.query('COMMIT');
     res.status(201).json(rows[0]);
@@ -96,7 +102,7 @@ router.get('/', svcAuth(['admin','superadmin']), async (req, res) => {
 });
 
 /* ─── GET /api/service/tickets/my — worker's own tickets ─── */
-router.get('/my', svcAuth(['plc','wireman']), async (req, res) => {
+router.get('/my', svcAuth(['plc','wireman','admin','superadmin']), async (req, res) => {
   try {
     // Return ASSIGNED tickets for this worker PLUS any Open tickets
     // so any worker can pick up unassigned tickets
@@ -792,7 +798,7 @@ router.patch('/:id/plc-type', svcAuth(['plc','wireman','admin','superadmin']), a
 
 
 /* POST /tickets/:id/self-assign */
-router.post('/:id/self-assign', svcAuth(['plc','wireman']), async (req, res) => {
+router.post('/:id/self-assign', svcAuth(['plc','wireman','admin','superadmin']), async (req, res) => {
   try {
     const { rows: tk } = await pool.query(`SELECT id, status FROM service_tickets WHERE id=$1`, [req.params.id]);
     if (!tk.length) return res.status(404).json({ error: 'Not found' });

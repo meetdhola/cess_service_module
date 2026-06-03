@@ -140,4 +140,16 @@ router.patch('/users/:id', svcAuth(['superadmin']), async (req, res) => {
 
 
 
+
+/* GET /api/service/auth/agents — all admin+superadmin users for sales agent dropdown */
+router.get('/agents', svcAuth(), async (_req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, name, role, department FROM service_users
+        WHERE is_active=TRUE AND role IN ('admin','superadmin')
+        ORDER BY name ASC`);
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;

@@ -145,7 +145,7 @@ export default function NotesPanel({ ticketId, currentUserId }) {
                         ? 'bg-blue-50 border-blue-100 text-blue-900 rounded-tr-sm'
                         : 'bg-white border-slate-200 text-slate-800 rounded-tl-sm'
                     } ${n._pending ? 'opacity-60' : ''}`}>
-                      <MentionedText body={n.body}/>
+                      <MentionedText body={n.body} currentUserId={currentUserId} authorId={n.author_id}/>
                     </div>
                   </div>
                 </div>

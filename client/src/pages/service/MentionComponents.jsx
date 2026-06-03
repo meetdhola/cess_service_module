@@ -99,7 +99,19 @@ export function MentionInput({ ticketId, value, onChange, onSubmit, disabled, pl
         const { data } = await svcApi.get(`/tickets/${ticketId}/mention-suggestions`, {
           params: query ? { q: query, limit: 8 } : { limit: 10 },
         });
-        if (!cancelled) { setSuggs(data); setActiveIdx(0); }
+        if (!cancelled) {
+          // Add special @everyone and @self options at the top
+          const specials = [];
+          const q = query.toLowerCase();
+          if (!query || 'everyone'.startsWith(q) || 'all'.startsWith(q)) {
+            specials.push({ id: 'everyone', name: 'everyone', kind: 'everyone', _special: 'everyone', sublabel: 'Notify all members' });
+          }
+          if (!query || 'self'.startsWith(q) || 'me'.startsWith(q)) {
+            specials.push({ id: 'self', name: 'Self (me)', kind: 'self', _special: 'self', sublabel: 'Tag yourself' });
+          }
+          setSuggs([...specials, ...data]);
+          setActiveIdx(0);
+        }
       } catch (e) {
         if (!cancelled) setSuggs([]);
       } finally {
@@ -112,7 +124,11 @@ export function MentionInput({ ticketId, value, onChange, onSubmit, disabled, pl
   /* — Insert a selection — */
   const insertSuggestion = (s) => {
     if (atIndex < 0 || !taRef.current) return;
-    const token = `@[${s.name}](${s.id}) `;
+    const token = s._special === 'everyone'
+      ? `@everyone `
+      : s._special === 'self'
+      ? `@me `
+      : `@[${s.name}](${s.id}) `;
     const caret = taRef.current.selectionStart;
     const before = value.slice(0, atIndex);
     const after  = value.slice(caret);
@@ -205,7 +221,9 @@ export function MentionInput({ ticketId, value, onChange, onSubmit, disabled, pl
                 }`}>
                 {/* Avatar */}
                 {s.kind === 'everyone' ? (
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-base flex-shrink-0">📢</div>
+                  <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">ALL</div>
+                ) : s.kind === 'self' ? (
+                  <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">ME</div>
                 ) : (
                   <div className={`w-8 h-8 rounded-full bg-gradient-to-br ${roleGradient(s.role)} flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0 ring-2 ring-white`}>
                     {initials(s.name)}
@@ -234,20 +252,28 @@ export function MentionInput({ ticketId, value, onChange, onSubmit, disabled, pl
 
 
 /* ───────── MentionedText (renders body w/ chips) ───────── */
-export function MentionedText({ body }) {
+export function MentionedText({ body, currentUserId, authorId }) {
   if (!body) return null;
-  // Split body into [text, token, text, token, ...]
+  const isAuthor = currentUserId && authorId && currentUserId === authorId;
+
+  // @me — show only to author, hide from others
+  let processedBody = body;
+  if (body.includes('@me')) {
+    processedBody = isAuthor
+      ? body.replace(/@me/g, '@[myself](me)')
+      : body.replace(/@me/g, '').trim();
+  }
+
   const parts = [];
   let last = 0;
   let m;
   TOKEN_RE.lastIndex = 0;
-  while ((m = TOKEN_RE.exec(body)) !== null) {
-    if (m.index > last) parts.push({ type: 'text', value: body.slice(last, m.index) });
+  while ((m = TOKEN_RE.exec(processedBody)) !== null) {
+    if (m.index > last) parts.push({ type: 'text', value: processedBody.slice(last, m.index) });
     parts.push({ type: 'mention', name: m[1], id: m[2] });
     last = m.index + m[0].length;
   }
-  if (last < body.length) parts.push({ type: 'text', value: body.slice(last) });
-
+  if (last < processedBody.length) parts.push({ type: 'text', value: processedBody.slice(last) });
   return (
     <span className="whitespace-pre-wrap break-words">
       {parts.map((p, i) => p.type === 'text'
@@ -266,6 +292,7 @@ function MentionChip({ name, id }) {
   const [loading, setLoading] = useState(false);
 
   const isEveryone = id === 'everyone';
+  const isSelf = id === 'me';
 
   const onClick = async (e) => {
     e.stopPropagation();

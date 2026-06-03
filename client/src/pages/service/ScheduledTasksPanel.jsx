@@ -140,7 +140,7 @@ export default function ScheduledTasksPanel({ ticketId }) {
       {loading ? (
         <div className="h-12 bg-slate-50 rounded-xl animate-pulse"/>
       ) : list.length === 0 ? (
-        <p className="text-center text-[11px] text-slate-400 py-3">No scheduled tasks{isAdmin ? ' — click "Add task" to create one' : ''}</p>
+        <p className="text-center text-[11px] text-slate-400 py-3">No scheduled tasks{can('create_ticket') ? ' — click "Add task" to create one' : ''}</p>
       ) : (
         <div className="space-y-2">
           {list.map(t => {

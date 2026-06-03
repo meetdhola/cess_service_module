@@ -16,6 +16,7 @@ const multer  = require('multer');
 const path    = require('path');
 const fs      = require('fs');
 const pool    = require('../db/pool');
+const { notify } = require('./serviceNotifications');
 const svcAuth = require('../middleware/serviceAuth');
 
 // Same uploads dir / disk storage pattern as serviceTickets.js
@@ -233,6 +234,112 @@ router.post('/tickets/:id/notes', svcAuth(), async (req, res) => {
 
     const note = { ...rows[0], author_name: req.svcUser.name, author_role: req.svcUser.role };
     req.io?.to('admins').emit('note:added', { ticket_id: req.params.id, note });
+
+    // Notify assigned workers + admins via notifications system
+    try {
+      // Get ticket info for notification title
+      const { rows: tkInfo } = await pool.query(
+        `SELECT ticket_id, customer_name FROM service_tickets WHERE id=$1`, [req.params.id]);
+      const tk = tkInfo[0];
+
+      // Get assigned workers
+      const { rows: assigned } = await pool.query(
+        `SELECT worker_id FROM ticket_assignments WHERE ticket_id=$1`, [req.params.id]);
+
+      // Get all admins/superadmins
+      const { rows: admins } = await pool.query(
+        `SELECT id FROM service_users WHERE role IN ('admin','superadmin') AND is_active=TRUE`);
+
+      // Combine: assigned workers + admins, excluding the sender
+      const recipientIds = [
+        ...assigned.map(a => a.worker_id),
+        ...admins.map(a => a.id),
+      ];
+
+      // Also emit socket to assigned workers
+      for (const { worker_id } of assigned) {
+        req.io?.to(`user:${worker_id}`).emit('note:added', { ticket_id: req.params.id, note });
+      }
+
+      // ── Notification logic ──
+      const ticketRef = tk?.ticket_id || 'ticket';
+      const noteLink  = `/service/admin/tickets/${req.params.id}`;
+      const cleanBody = note.body
+        .replace(/@\[([^\]]+)\]\([^)]+\)/g, (_, name) => '@'+name)
+        .replace(/@everyone|@me/g, '').trim().slice(0, 80);
+
+      // 1. Specific @[Name](uuid) mentions — only notify tagged people
+      const mentionRe2 = /@\[([^\]]+)\]\(([^)]+)\)/g;
+      const mentionedIds = [];
+      let mx;
+      while ((mx = mentionRe2.exec(note.body)) !== null) {
+        if (mx[2] !== req.svcUser.id) mentionedIds.push(mx[2]);
+      }
+      if (mentionedIds.length) {
+        await notify(req.io, {
+          recipientIds: [...new Set(mentionedIds)],
+          skipRecipientId: req.svcUser.id,
+          type: 'note_mention',
+          title: `${req.svcUser.name} mentioned you`,
+          body: `${ticketRef}: ${cleanBody}`,
+          link: noteLink,
+          context: { ticket_id: req.params.id, note_id: note.id },
+        });
+      }
+
+      // 2. @everyone — note_added to all (NOT note_mention)
+      const hasEveryone = note.body.includes('@everyone');
+      if (hasEveryone) {
+        await notify(req.io, {
+          recipientIds: recipientIds,
+          skipRecipientId: req.svcUser.id,
+          type: 'note_added',
+          title: `${req.svcUser.name} posted a note (everyone)`,
+          body: `${ticketRef}: ${cleanBody}`,
+          link: noteLink,
+          context: { ticket_id: req.params.id, note_id: note.id },
+        });
+      }
+
+      // 3. @me — ONLY notify the sender themselves
+      if (note.body.includes('@me')) {
+        await notify(req.io, {
+          recipientIds: [req.svcUser.id],
+          skipRecipientId: null,
+          type: 'note_self',
+          title: 'Reminder: you tagged yourself',
+          body: `${ticketRef}: ${cleanBody}`,
+          link: noteLink,
+          context: { ticket_id: req.params.id, note_id: note.id },
+        });
+      }
+
+      // 4. No special tag — notify all with note_added
+      if (!hasEveryone && !mentionedIds.length) {
+        await notify(req.io, {
+          recipientIds: recipientIds,
+          skipRecipientId: req.svcUser.id,
+          type: 'note_added',
+          title: `New note on ${ticketRef}`,
+          body: `${req.svcUser.name}: ${cleanBody}`,
+          link: noteLink,
+          context: { ticket_id: req.params.id, note_id: note.id },
+        });
+      }
+      if (!hasEveryone && !mentionedIds.length) {
+        await notify(req.io, {
+          recipientIds: recipientIds,
+          skipRecipientId: req.svcUser.id,
+          type: 'note_added',
+          title: `New note on ${ticketRef}`,
+          body: `${req.svcUser.name}: ${cleanBody}`,
+          link: noteLink,
+          context: { ticket_id: req.params.id, note_id: note.id },
+        });
+      }
+    } catch (notifErr) {
+      console.error('Notification error:', notifErr.message);
+    }
     res.status(201).json(note);
   } catch (e) {
     console.error('Note add error:', e);
@@ -558,6 +665,23 @@ router.get('/tickets/:id/reopens', svcAuth(), async (req, res) => {
     console.error('Reopens fetch error:', e.message);
     res.json([]);
   }
+});
+
+
+/* GET /tickets/:id/mention-suggestions — returns users for @mention */
+router.get('/tickets/:id/mention-suggestions', svcAuth(), async (req, res) => {
+  try {
+    const q = (req.query.q || '').trim();
+    const { rows } = await pool.query(
+      `SELECT id, name, role, department, phone
+         FROM service_users
+        WHERE is_active = TRUE
+          AND ($1 = '' OR name ILIKE $2)
+        ORDER BY role, name
+        LIMIT 10`,
+      [q, `%${q}%`]);
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 module.exports = router;

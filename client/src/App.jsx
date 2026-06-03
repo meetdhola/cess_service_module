@@ -29,7 +29,11 @@ function SvcPrivate({ roles, children }) {
 function SvcPublic({ children }) {
   const { svcUser, svcReady } = useSvcAuth();
   if (!svcReady) return null;
-  if (svcUser) return <Navigate to={svcUser.role === 'plc' || svcUser.role === 'wireman' ? '/service/worker' : '/service/admin'} replace />;
+  if (svcUser) {
+    const isWorker = svcUser.role === 'plc' || svcUser.role === 'wireman';
+    const isHeadEngineer = ['admin','superadmin'].includes(svcUser.role) && ['PLC','Wireman','Design'].includes(svcUser.department||'');
+    return <Navigate to={isWorker || isHeadEngineer ? '/service/worker' : '/service/admin'} replace />;
+  }
   return children;
 }
 
@@ -43,10 +47,10 @@ export default function App() {
             <Route path="/" element={<SvcPublic><ServiceLogin /></SvcPublic>} />
 
             {/* WORKER routes — with :tab param */}
-            <Route path="/service/worker"        element={<SvcPrivate roles={['plc','wireman']}><WorkerDashboard /></SvcPrivate>}/>
-            <Route path="/service/worker/:tab"   element={<SvcPrivate roles={['plc','wireman']}><WorkerDashboard /></SvcPrivate>}/>
+            <Route path="/service/worker"        element={<SvcPrivate roles={['plc','wireman','admin','superadmin']}><WorkerDashboard /></SvcPrivate>}/>
+            <Route path="/service/worker/:tab"   element={<SvcPrivate roles={['plc','wireman','admin','superadmin']}><WorkerDashboard /></SvcPrivate>}/>
             <Route path="/service/worker/tickets/:ticketId"
-                                                 element={<SvcPrivate roles={['plc','wireman']}><TicketDetailPage /></SvcPrivate>}/>
+                                                 element={<SvcPrivate roles={['plc','wireman','admin','superadmin']}><TicketDetailPage /></SvcPrivate>}/>
 
             {/* ADMIN routes — with :tab param */}
             <Route path="/service/admin"         element={<SvcPrivate roles={['admin','superadmin']}><AdminDashboard /></SvcPrivate>}/>
@@ -95,8 +99,6 @@ export default function App() {
 // function SvcPublic({ children }) {
 //   const { svcUser, svcReady } = useSvcAuth();
 //   if (!svcReady) return null;
-//   if (svcUser) return <Navigate to={svcUser.role === 'plc' || svcUser.role === 'wireman' ? '/service/worker' : '/service/admin'} replace />;
-//   return children;
 // }
 
 // export default function App() {
@@ -109,7 +111,7 @@ export default function App() {
 //             {/* <Route path="/app" element={<PrivateRoute><MainPage /></PrivateRoute>} /> */}
 //             <Route path="/service"       element={<InquiryForm />} />
 //             <Route path="/" element={<SvcPublic><ServiceLogin /></SvcPublic>} />
-//             <Route path="/service/worker" element={<SvcPrivate roles={['plc','wireman']}><WorkerDashboard /></SvcPrivate>}/>
+//             <Route path="/service/worker" element={<SvcPrivate roles={['plc','wireman','admin','superadmin']}><WorkerDashboard /></SvcPrivate>}/>
 //             <Route path="/service/admin"  element={<SvcPrivate roles={['admin','superadmin']}><AdminDashboard /></SvcPrivate>}/>
 //             <Route path="/uploads/*" element={null} />
             <Route path="*" element={<Navigate to="/" replace />} />

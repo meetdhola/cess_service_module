@@ -13,6 +13,7 @@ import { useSvcAuth } from '../../context/SvcAuthContext';
    const inrFmt = n => `₹${Number(n||0).toLocaleString('en-IN',{maximumFractionDigits:0})}`;
 
 export default function BillingAuditPanel({ ticketId, isWarranty, isPrivileged }) {
+  const { can } = useSvcAuth();
   const [data, setData]             = useState(null);
   const [suggest, setSuggest]       = useState(null);
   const [workerFiles, setWorkerFiles] = useState({});   // { workers: [{worker_id, suggested_amount, basis, expense_amount, report_url, ...}] }

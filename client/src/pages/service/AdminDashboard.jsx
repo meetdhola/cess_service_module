@@ -1485,7 +1485,7 @@ export default function AdminDashboard() {
     if (required && !can(required)) {
       navigate('/service/admin/overview', { replace: true });
     }
-  }, [tab, can, isSuperAdmin, navigate]);
+  }, [tab, can, navigate]);
 
   const [tickets,setTickets]   = useState([]);
   const [workers,setWorkers]   = useState([]);

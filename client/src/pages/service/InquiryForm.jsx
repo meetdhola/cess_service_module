@@ -10,11 +10,11 @@ const SVC = [
   { value:'new_development', label:'New Development', prefix:'SE', desc:'Custom build / project' },
   { value:'after_sales',     label:'After Sales',     prefix:'SE', desc:'Post-sale support' },
 ];
-const AGENTS = ['Divy Shah','Chirag Shah','Ketan Tundiya','Chetankumar Shah','Pankaj Rana','Vivardhan Gandhi','Nikita Koshti','Yogita Shah'];
+const AGENTS = ['Divy Shah','Chirag Shah','Ketan Tundiya','Chetankumar Shah','Pankaj Rana','Vivardhan Gandhi','Nikita Koshti','Yogita Shah']; // kept as fallback
 
 const INIT = {
   customer_name:'', address:'', service_type:'', description:'',
-  contact_name:'', contact_phone:'', designation:'', sales_agent:'',
+  contact_name:'', contact_phone:'', designation:'', sales_agent:'', deadline_date:'',
   priority:'Medium', needs_plc:false, needs_wiring:false, plc_type:'',
   warranty_status:'in_warranty',
   invoice_no:'', challan_no:''
@@ -362,7 +362,14 @@ function VoiceRecorder({ onRecord, existing }) {
 /* ═════════════════════════════════════════════ */
 export default function InquiryForm() {
   const [form,  setForm]  = useState(INIT);
-  const [files, setFiles] = useState([]);
+  const [files,  setFiles]  = useState([]);
+  const [agents, setAgents] = useState(AGENTS);
+  useEffect(() => {
+    axios.get('/api/service/auth/agents', { headers: { Authorization: `Bearer ${localStorage.getItem('svc_token')}` } }).then(({ data }) => {
+      const names = (data || []).map(u => u.name).filter(Boolean);
+      if (names.length) setAgents(names);
+    }).catch(() => { setAgents(AGENTS); });
+  }, []);
   const [done,  setDone]  = useState(null);
   const [busy,  setBusy]  = useState(false);
   const [err,   setErr]   = useState('');
@@ -403,6 +410,10 @@ export default function InquiryForm() {
     if (to === 2 && (!form.customer_name.trim() || !form.address.trim() || !form.service_type)) {
       setErr('Please fill all required fields');
       return;
+    if (to === 3 && !form.needs_plc && !form.needs_wiring) {
+      setErr('Please select at least one: PLC Engineer or Wireman');
+      return;
+    }
     }
     setStep(to);
     // Scroll to top on step change (mobile)
@@ -699,8 +710,11 @@ export default function InquiryForm() {
               <div><FLabel>Sales Agent</FLabel>
                 <FSel value={form.sales_agent} onChange={e=>set('sales_agent',e.target.value)}>
                   <option value="">— Select agent —</option>
-                  {AGENTS.map(a=><option key={a}>{a}</option>)}
+                  {agents.map(a=><option key={a}>{a}</option>)}
                 </FSel>
+              </div>
+              <div><FLabel>Customer Ask Date / Deadline</FLabel>
+                <FInput type="date" value={form.deadline_date} onChange={e=>set('deadline_date',e.target.value)}/>
               </div>
             </div>
 

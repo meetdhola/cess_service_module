@@ -757,7 +757,7 @@ function BillingAuditMount({ ticketId, isWarranty, onChange }) {
       </div>
     );
   }
-  return <Comp ticketId={ticketId} isWarranty={isWarranty} isPrivileged={true} onChange={onChange}/>;
+  return <Comp ticketId={ticketId} isWarranty={isWarranty} onChange={onChange}/>;
 }
 
 

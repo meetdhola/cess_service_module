@@ -28,24 +28,24 @@ router.post('/start', svcAuth(['plc','wireman','admin','superadmin']), svcPerm('
 });
 
 // ── POST /api/service/sessions/:id/pause ─────────────────────────────────
-// router.post('/:id/pause', svcAuth(['plc','wireman','admin','superadmin']), svcPerm('start_timer'), async (req, res) => {
-//   const { reason } = req.body;
-//   if (!reason?.trim()) return res.status(400).json({ error: 'Reason required' });
-//   const client = await pool.connect();
-//   try {
-//     await client.query('BEGIN');
-//     const { rows: sess } = await client.query(`SELECT * FROM work_sessions WHERE id=$1 AND worker_id=$2`, [req.params.id, req.svcUser.id]);
-//     if (!sess.length) return res.status(404).json({ error: 'Not found' });
-//     if (sess[0].status !== 'running') return res.status(400).json({ error: 'Not running' });
-//     const elapsed = Math.floor((Date.now() - new Date(sess[0].started_at).getTime()) / 1000);
-//     await client.query(`UPDATE work_sessions SET status='paused', total_seconds=total_seconds+$1 WHERE id=$2`, [elapsed, req.params.id]);
-//     const { rows: pause } = await client.query(`INSERT INTO session_pauses (session_id,paused_at,reason) VALUES ($1,NOW(),$2) RETURNING *`, [req.params.id, reason.trim()]);
-//     await client.query('COMMIT');
-//     req.io?.to('admins').emit('session:paused', { sessionId: req.params.id, reason: reason.trim(), worker: req.svcUser.name });
-//     res.json({ session: { ...sess[0], status:'paused', total_seconds: sess[0].total_seconds+elapsed }, pause: pause[0] });
-//   } catch (e) { await client.query('ROLLBACK'); res.status(500).json({ error: e.message }); }
-//   finally { client.release(); }
-// });
+router.post('/:id/pause', svcAuth(['plc','wireman','admin','superadmin']), svcPerm('start_timer'), async (req, res) => {
+  const { reason } = req.body;
+  if (!reason?.trim()) return res.status(400).json({ error: 'Reason required' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows: sess } = await client.query(`SELECT * FROM work_sessions WHERE id=$1 AND worker_id=$2`, [req.params.id, req.svcUser.id]);
+    if (!sess.length) return res.status(404).json({ error: 'Not found' });
+    if (sess[0].status !== 'running') return res.status(400).json({ error: 'Not running' });
+    const elapsed = Math.floor((Date.now() - new Date(sess[0].started_at).getTime()) / 1000);
+    await client.query(`UPDATE work_sessions SET status='paused', total_seconds=total_seconds+$1 WHERE id=$2`, [elapsed, req.params.id]);
+    const { rows: pause } = await client.query(`INSERT INTO session_pauses (session_id,paused_at,reason) VALUES ($1,NOW(),$2) RETURNING *`, [req.params.id, reason.trim()]);
+    await client.query('COMMIT');
+    req.io?.to('admins').emit('session:paused', { sessionId: req.params.id, reason: reason.trim(), worker: req.svcUser.name });
+    res.json({ session: { ...sess[0], status:'paused', total_seconds: sess[0].total_seconds+elapsed }, pause: pause[0] });
+  } catch (e) { await client.query('ROLLBACK'); res.status(500).json({ error: e.message }); }
+  finally { client.release(); }
+});
 
 
 // ── POST /api/service/sessions/:id/resume ────────────────────────────────

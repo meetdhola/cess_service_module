@@ -113,7 +113,9 @@ function WorkerActions({ ticket, billing, onAnyChange }) {
       await svcApi.post(`/sessions/${sess.id}/pause`, { reason, reason_category: reasonCat });
       setPauseOpen(false); setReason(''); setReasonCat('other');
       await loadActive();
-    } catch (e) { alert(e.response?.data?.error || 'Failed'); }
+    } catch (e) { alert(e.response?.data );
+      console.log(e.response?.data )
+     }
     finally { setBusy(false); }
   };
   const resume = async () => {

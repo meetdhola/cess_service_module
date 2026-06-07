@@ -1,24 +1,22 @@
-# Stage 1: Build React with Vite
 FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-COPY client/package*.json ./
+COPY package*.json ./
 RUN npm install
 
-COPY client/ .
+COPY . .
 
-# Build React app
-ENV VITE_API_URL=/api
+# Build React app (Vite)
 RUN npm run build
 
-# Stage 2: Serve with Nginx
+# Serve with nginx
 FROM nginx:alpine
 
-# Remove default config
-RUN rm /etc/nginx/conf.d/default.conf
+# Copy built app
+COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Copy custom nginx config
+# React SPA routing + API proxy
 RUN echo 'server { \
   listen 80; \
   root /usr/share/nginx/html; \
@@ -37,9 +35,5 @@ RUN echo 'server { \
   } \
 }' > /etc/nginx/conf.d/default.conf
 
-# Copy built frontend
-COPY --from=builder /app/dist /usr/share/nginx/html
-
 EXPOSE 80
-
 CMD ["nginx", "-g", "daemon off;"]

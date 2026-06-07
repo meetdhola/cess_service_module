@@ -114,7 +114,7 @@ function WorkerActions({ ticket, billing, onAnyChange }) {
       setPauseOpen(false); setReason(''); setReasonCat('other');
       await loadActive();
     } catch (e) { alert(e.response?.data );
-      console.log(e.response?.data )
+      // console.log(e.response?.data )
      }
     finally { setBusy(false); }
   };

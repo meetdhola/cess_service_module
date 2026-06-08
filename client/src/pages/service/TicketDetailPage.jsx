@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import svcApi from '../../serviceApi';
+import PartySearch from './PartySearch';
 import { useSvcAuth } from '../../context/SvcAuthContext';
 import { useSocket } from '../../useSocket';
 
@@ -437,6 +438,18 @@ export default function TicketDetailPage() {
   const { svcUser, can } = useSvcAuth();
 
   const [data, setData]       = useState(null);
+  const [editing,  setEditing]  = useState(false);
+  const [editForm, setEditForm] = useState({});
+  const [agentList, setAgentList] = useState([]);
+
+  // Load agents for edit form dropdown
+  React.useEffect(() => {
+    const token = localStorage.getItem('svc_token');
+    fetch('/api/service/auth/agents', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then(d => setAgentList(Array.isArray(d) ? d.map(u => u.name) : []))
+      .catch(() => {});
+  }, []);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState(null);
   const [reopenOpen, setReopenOpen] = useState(false);
@@ -585,12 +598,37 @@ export default function TicketDetailPage() {
 
             {/* Ticket info */}
             <section className="bg-white rounded-3xl border border-slate-200/60 p-5">
-              <h3 className="text-sm font-black text-slate-900 mb-4">Ticket info</h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-black text-slate-900">Ticket info</h3>
+                {can('assign_workers') && !editing && (
+                  <button onClick={() => { setEditForm({
+                    customer_name: ticket.customer_name,
+                    address: ticket.address,
+                    service_type: ticket.service_type,
+                    description: ticket.description,
+                    priority: ticket.priority,
+                    contact_name: ticket.contact_name || '',
+                    contact_phone: ticket.contact_phone || '',
+                    designation: ticket.designation || '',
+                    sales_agent: ticket.sales_agent || '',
+                    warranty_status: ticket.warranty_status,
+                    needs_plc: ticket.needs_plc,
+                    needs_wiring: ticket.needs_wiring,
+                    plc_type: ticket.plc_type || '',
+                    deadline_date: ticket.deadline_date ? ticket.deadline_date.split('T')[0] : '',
+                  }); setEditing(true); }}
+                    className="text-[11px] font-bold px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 transition-all">
+                    ✏️ Edit
+                  </button>
+                )}
+              </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3">
                 {[
                   ['Service',    ticket.service_type?.replace(/_/g,' ')],
                   ['Created',    fmtDate(ticket.created_at)],
+                  ['Created by', ticket.created_by_name || '—'],
                   ['Sales agent',ticket.sales_agent || '—'],
+                  ['Deadline',   ticket.deadline_date ? new Date(ticket.deadline_date).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}) : '—'],
                   ['Contact',    ticket.contact_name || '—'],
                   ['Phone',      ticket.contact_phone || '—'],
                   ['Designation',ticket.designation || '—'],
@@ -605,6 +643,90 @@ export default function TicketDetailPage() {
                 ))}
               </div>
 
+              {/* Edit form */}
+              {editing && (
+                <div className="mt-4 pt-4 border-t border-slate-100 space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Customer Name</p>
+                      <PartySearch
+                        value={editForm.customer_name||''}
+                        onChange={v => setEditForm(p=>({...p, customer_name:v}))}
+                        onSelect={async (party) => {
+                          const cityState = [party.city, party.state].filter(Boolean).join(', ');
+                          setEditForm(p=>({
+                            ...p,
+                            customer_name: party.name,
+                            address: p.address?.trim() ? p.address : cityState,
+                          }));
+                          // Autofill contact from last ticket
+                          try {
+                            const token = localStorage.getItem('svc_token');
+                            const res = await fetch(`/api/service/tickets/party-contact?name=${encodeURIComponent(party.name)}`,
+                              { headers: { Authorization: `Bearer ${token}` } });
+                            const d = await res.json();
+                            if (d.contact_name) {
+                              setEditForm(p=>({
+                                ...p,
+                                contact_name:  p.contact_name  || d.contact_name  || '',
+                                contact_phone: p.contact_phone || d.contact_phone || '',
+                                designation:   p.designation   || d.designation   || '',
+                              }));
+                            }
+                          } catch {}
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Priority</p>
+                      <select className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:border-slate-400 bg-white" value={editForm.priority||''} onChange={e=>setEditForm(p=>({...p,priority:e.target.value}))}>
+                        {['High','Medium','Low'].map(v=><option key={v}>{v}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Contact Person</p>
+                      <input className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:border-slate-400" value={editForm.contact_name||''} onChange={e=>setEditForm(p=>({...p,contact_name:e.target.value}))}/>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Contact Phone</p>
+                      <input className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:border-slate-400" value={editForm.contact_phone||''} onChange={e=>setEditForm(p=>({...p,contact_phone:e.target.value}))}/>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Designation</p>
+                      <input className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:border-slate-400" value={editForm.designation||''} onChange={e=>setEditForm(p=>({...p,designation:e.target.value}))}/>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Sales Agent</p>
+                      <select className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:border-slate-400 bg-white" value={editForm.sales_agent||''} onChange={e=>setEditForm(p=>({...p,sales_agent:e.target.value}))}>
+                        <option value="">— Select agent —</option>
+                        {agentList.map(a => <option key={a} value={a}>{a}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Deadline Date</p>
+                      <input type="date" className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:border-slate-400" value={editForm.deadline_date||''} onChange={e=>setEditForm(p=>({...p,deadline_date:e.target.value}))}/>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Address</p>
+                      <input className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:border-slate-400" value={editForm.address||''} onChange={e=>setEditForm(p=>({...p,address:e.target.value}))}/>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Description</p>
+                    <textarea rows={3} className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:border-slate-400 resize-none" value={editForm.description||''} onChange={e=>setEditForm(p=>({...p,description:e.target.value}))}/>
+                  </div>
+                  <div className="flex gap-2 justify-end pt-1">
+                    <button onClick={()=>setEditing(false)} className="px-4 py-2 text-xs font-bold border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 transition-all">Cancel</button>
+                    <button onClick={async()=>{
+                      try{
+                        await svcApi.patch(`/tickets/${ticket.id}/edit`, editForm);
+                        setEditing(false);
+                        load();
+                      }catch(e){alert(e.response?.data?.error||'Failed to save');}
+                    }} className="px-4 py-2 text-xs font-bold bg-slate-900 hover:bg-slate-700 text-white rounded-xl transition-all">Save changes</button>
+                  </div>
+                </div>
+              )}
               {/* PLC type toggle — visible to workers and admins when PLC is required */}
               {ticket.needs_plc && (isWorker || can('assign_workers')) && (
                 <div className="mt-4 flex items-center gap-3">

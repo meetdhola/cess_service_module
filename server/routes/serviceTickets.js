@@ -20,9 +20,19 @@ const upload = multer({ storage, limits: { fileSize: 50*1024*1024 } });
 const PREFIX_FOR = { installation:'IN', troubleshooting:'SE', new_development:'SE', after_sales:'SE' };
 const isMediaType = mime => mime.startsWith('image/') ? 'photo' : mime.startsWith('video/') ? 'video' : mime.startsWith('audio/') ? 'voice' : 'other';
 
-/* ─── POST /api/service/tickets — create (PUBLIC inquiry form) ─── */
+/* ─── POST /api/service/tickets — create (PUBLIC inquiry form, optional auth) ─── */
 router.post('/', async (req, res) => {
   const b = req.body;
+  // Extract creator from token if logged-in user submits
+  let creatorId = null;
+  const authHeader = req.headers.authorization;
+  if (authHeader?.startsWith('Bearer ')) {
+    try {
+      const jwt = require('jsonwebtoken');
+      const decoded = jwt.verify(authHeader.slice(7), process.env.JWT_SECRET || 'cess_secret_2024');
+      creatorId = decoded.id || null;
+    } catch {}
+  }
   if (!b.customer_name?.trim() || !b.address?.trim() || !b.service_type) {
     return res.status(400).json({ error: 'customer_name, address, service_type required' });
   }
@@ -43,8 +53,8 @@ router.post('/', async (req, res) => {
         (ticket_id, service_type, customer_name, address, description, priority,
          contact_name, contact_phone, designation, sales_agent,
          needs_plc, needs_wiring, plc_type,
-         warranty_status, invoice_no, invoice_date, challan_no, challan_date, deadline_date)
-       VALUES ($1,$2,$3,$4,$5,$6, $7,$8,$9,$10, $11,$12,$13, $14,$15,$16,$17,$18,$19)
+         warranty_status, invoice_no, invoice_date, challan_no, challan_date, deadline_date, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6, $7,$8,$9,$10, $11,$12,$13, $14,$15,$16,$17,$18,$19,$20)
        RETURNING *`,
       [ticket_id, b.service_type, b.customer_name.trim(), b.address.trim(), b.description||null, b.priority||'Medium',
        b.contact_name||null, b.contact_phone||null, b.designation||null, b.sales_agent||null,
@@ -52,7 +62,7 @@ router.post('/', async (req, res) => {
        b.warranty_status||'in_warranty',
        b.invoice_no||null, b.invoice_no?new Date():null,
        b.challan_no||null, b.challan_no?new Date():null,
-       b.deadline_date||null]
+       b.deadline_date||null, creatorId]
     );
     await client.query('COMMIT');
     res.status(201).json(rows[0]);
@@ -94,8 +104,10 @@ router.get('/', svcAuth(['admin','superadmin']), svcPerm('view_all_tickets'), as
       COALESCE((SELECT json_agg(json_build_object('worker_id', su.id, 'name', su.name, 'role', su.role))
                   FROM ticket_assignments ta JOIN service_users su ON su.id=ta.worker_id
                  WHERE ta.ticket_id=t.id AND ta.role='wireman'), '[]'::json) AS assigned_wiremen,
-      (SELECT COUNT(*)::int FROM ticket_documents WHERE ticket_id=t.id) AS doc_count
+      (SELECT COUNT(*)::int FROM ticket_documents WHERE ticket_id=t.id) AS doc_count,
+      su.name AS created_by_name
     FROM service_tickets t
+    LEFT JOIN service_users su ON su.id = t.created_by
     ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
     ORDER BY t.created_at DESC LIMIT 500`;
   try { const { rows } = await pool.query(sql, args); res.json(rows); }
@@ -152,9 +164,30 @@ router.get('/parties/search', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+/* GET /api/service/tickets/party-contact — last contact for a company */
+router.get('/party-contact', svcAuth(), async (req, res) => {
+  const { name } = req.query;
+  if (!name) return res.json({});
+  try {
+    const { rows } = await pool.query(
+      `SELECT contact_name, contact_phone, designation
+         FROM service_tickets
+        WHERE customer_name ILIKE $1
+          AND contact_name IS NOT NULL
+        ORDER BY created_at DESC
+        LIMIT 1`,
+      [name]);
+    res.json(rows[0] || {});
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.get('/:id', svcAuth(), async (req, res) => {
   try {
-    const { rows } = await pool.query(`SELECT * FROM service_tickets WHERE id=$1`, [req.params.id]);
+    const { rows } = await pool.query(
+      `SELECT t.*, su.name AS created_by_name
+         FROM service_tickets t
+         LEFT JOIN service_users su ON su.id = t.created_by
+        WHERE t.id=$1`, [req.params.id]);
     if (!rows.length) return res.status(404).json({ error: 'Not found' });
     res.json(rows[0]);
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -945,6 +978,47 @@ router.delete('/:id', svcAuth(['superadmin']), svcPerm('delete_ticket'), async (
     res.json({ ok: true, ticket_id: rows[0].ticket_id });
   } catch (e) {
     console.error('Delete ticket error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+
+/* PATCH /api/service/tickets/:id/edit — edit ticket fields (admin) */
+router.patch('/:id/edit', svcAuth(['admin','superadmin']), svcPerm('assign_workers'), async (req, res) => {
+  const { customer_name, address, service_type, description, priority,
+          contact_name, contact_phone, designation, sales_agent,
+          warranty_status, needs_plc, needs_wiring, plc_type, deadline_date } = req.body;
+  try {
+    const { rows } = await pool.query(
+      `UPDATE service_tickets SET
+        customer_name  = COALESCE($1,  customer_name),
+        address        = COALESCE($2,  address),
+        service_type   = COALESCE($3,  service_type),
+        description    = COALESCE($4,  description),
+        priority       = COALESCE($5,  priority),
+        contact_name   = COALESCE($6,  contact_name),
+        contact_phone  = COALESCE($7,  contact_phone),
+        designation    = COALESCE($8,  designation),
+        sales_agent    = COALESCE($9,  sales_agent),
+        warranty_status= COALESCE($10, warranty_status),
+        needs_plc      = COALESCE($11, needs_plc),
+        needs_wiring   = COALESCE($12, needs_wiring),
+        plc_type       = COALESCE($13, plc_type),
+        deadline_date  = COALESCE($14, deadline_date),
+        updated_at     = NOW()
+       WHERE id=$15::uuid
+       RETURNING *`,
+      [customer_name||null, address||null, service_type||null, description||null, priority||null,
+       contact_name||null, contact_phone||null, designation||null, sales_agent||null,
+       warranty_status||null,
+       needs_plc!=null ? !!needs_plc : null,
+       needs_wiring!=null ? !!needs_wiring : null,
+       plc_type||null, deadline_date||null,
+       req.params.id]);
+    if (!rows.length) return res.status(404).json({ error: 'Ticket not found' });
+    res.json(rows[0]);
+  } catch (e) {
+    console.error('Edit ticket error:', e);
     res.status(500).json({ error: e.message });
   }
 });

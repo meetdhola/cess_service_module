@@ -1939,7 +1939,7 @@ const wireW = workers.filter(w => w.role === 'wireman' || (w.role === 'admin' &&
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs">
                     <thead className="bg-slate-50/50 border-b border-slate-100">
-                      <tr>{['Ticket','Customer','Service','Priority','Status','PLC','Wireman','Date','Actions'].map(h=><th key={h} className="text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider px-4 py-3 whitespace-nowrap">{h}</th>)}</tr>
+                      <tr>{['Ticket','Customer','Sales Agent','Created By','Service','Priority','Status','PLC','Wireman','Date','Actions'].map(h=><th key={h} className="text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider px-4 py-3 whitespace-nowrap">{h}</th>)}</tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {!tickets.length?<tr><td colSpan={9} className="text-center py-16 text-slate-400">No tickets found.</td></tr>:tickets.map(tk=>{
@@ -1951,6 +1951,16 @@ const wireW = workers.filter(w => w.role === 'wireman' || (w.role === 'admin' &&
                             <td className="px-4 py-3.5"><Link to={`/service/admin/tickets/${tk.ticket_id}`} className="font-mono text-[11px] font-black text-blue-600 bg-blue-50 px-2 py-1 rounded-lg hover:bg-blue-100 transition-all">{tk.ticket_id}</Link></td>
                               {/* <td className="px-4 py-3.5"><span className="font-mono text-[11px] font-black text-blue-600 bg-blue-50 px-2 py-1 rounded-lg">{tk.ticket_id}</span></td> */}
                               <td className="px-4 py-3.5 max-w-[130px]"><p className="font-bold text-slate-800 truncate">{tk.customer_name}</p><p className="text-[10px] text-slate-400 truncate">{tk.address?.slice(0,28)}</p></td>
+                              <td className="px-4 py-3.5 max-w-[130px]"><p className="font-bold text-slate-800 truncate">
+                              {tk.sales_agent ? (
+                                  <span className="font-semibold">{tk.sales_agent.split(' ')[0]}</span>
+                                ) : <span className="text-slate-300">—</span>}
+                              </p></td>
+                              <td className="px-4 py-3.5 max-w-[130px]"><p className="font-bold text-slate-800 truncate">
+                              {tk.created_by_name && (
+                                  <div className="text-[10px] text-slate-400 mt-0.5">by {tk.created_by_name.split(' ')[0]}</div>
+                                )}
+                                </p></td>
                               <td className="px-4 py-3.5 text-slate-600 whitespace-nowrap">{SVC_L[tk.service_type]||tk.service_type}</td>
                               <td className="px-4 py-3.5"><span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${PR_CLR[tk.priority]}`}>{tk.priority}</span></td>
                               <td className="px-4 py-3.5">

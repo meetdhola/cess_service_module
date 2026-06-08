@@ -392,14 +392,29 @@ export default function InquiryForm() {
   });
   // const sel = SVC.find(s => s.value === form.service_type);
   const sel = SVC.find(s => s.value === form.service_type);
-  const handlePartySelect = (party) => {
-  const cityState = [party.city, party.state].filter(Boolean).join(', ');
-  setForm(p => ({
-    ...p,
-    customer_name: party.name,
-    address: p.address.trim() ? p.address : cityState,
-  }));
-};
+  const handlePartySelect = async (party) => {
+    const cityState = [party.city, party.state].filter(Boolean).join(', ');
+    setForm(p => ({
+      ...p,
+      customer_name: party.name,
+      address: p.address.trim() ? p.address : cityState,
+    }));
+    // Auto-fill contact details from last ticket for this company
+    try {
+      const res = await axios.get(
+        `/api/service/tickets/party-contact?name=${encodeURIComponent(party.name)}`,
+        { headers: { Authorization: `Bearer ${localStorage.getItem('svc_token')}` } }
+      );
+      if (res.data && res.data.contact_name) {
+        setForm(p => ({
+          ...p,
+          contact_name:  p.contact_name  || res.data.contact_name  || '',
+          contact_phone: p.contact_phone || res.data.contact_phone || '',
+          designation:   p.designation   || res.data.designation   || '',
+        }));
+      }
+    } catch {}
+  };
 
   const addFiles = e => setFiles(p => [...p, ...Array.from(e.target.files)].slice(0,10));
   const rmFile   = i => setFiles(p => p.filter((_,idx) => idx !== i));
@@ -424,7 +439,9 @@ export default function InquiryForm() {
     setErr(''); setBusy(true);
     try {
       // 1. Create the ticket
-      const { data: ticket } = await axios.post('/api/service/tickets', form);
+      const token = localStorage.getItem('svc_token');
+      const { data: ticket } = await axios.post('/api/service/tickets', form,
+        token ? { headers: { Authorization: `Bearer ${token}` } } : {});
 
       // 2. Upload all media (files + voice) in ONE request
       if (files.length > 0 || voiceBlob) {

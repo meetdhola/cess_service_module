@@ -64,7 +64,7 @@ export function ChallanPanel({ ticketId }) {
   const [loading, setLoading] = useState(true);
   const [no, setNo]           = useState('');
   const [note, setNote]       = useState('');
-  const [file, setFile]       = useState(null);
+  const [files, setFiles]     = useState([]);
   const [saving, setSaving]   = useState(false);
   const [editId, setEditId]   = useState(null);   // id being edited
   const [editNo, setEditNo]   = useState('');
@@ -89,21 +89,25 @@ export function ChallanPanel({ ticketId }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [preview]);
 
-  const canAdd = (no.trim() || file) && !saving;
+  const canAdd = (no.trim() || files.length > 0) && !saving;
 
   const add = async () => {
-    if (!no.trim() && !file) { alert('Add a challan number or attach a file (at least one).'); return; }
+    if (!no.trim() && !files.length) { alert('Add a challan number or attach a file.'); return; }
     setSaving(true);
     try {
       const fd = new FormData();
       if (no.trim()) fd.append('challan_no', no.trim());
       if (note.trim()) fd.append('note', note.trim());
-      if (file) fd.append('file', file);
+      for (const f of files) fd.append('file', f);
       await svcApi.post(`/tickets/${ticketId}/challans`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
-      setNo(''); setNote(''); setFile(null); if (addRef.current) addRef.current.value = '';
+      setNo(''); setNote(''); setFiles([]); if (addRef.current) addRef.current.value = '';
       await load();
-    } catch (e) { alert(e.response?.data?.error || 'Failed to add challan'); }
-    finally { setSaving(false); }
+    } catch (e) {
+      alert(e.response?.data?.error || 'Failed to add challan');
+      setSaving(false);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const startEdit = (c) => { setEditId(c.id); setEditNo(c.challan_no || ''); setEditNote(c.note || ''); setEditFile(null); };
@@ -155,13 +159,13 @@ export function ChallanPanel({ ticketId }) {
             className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-slate-400 focus:bg-white transition-all"/>
         </div>
         <div className="flex items-center gap-2">
-          <input ref={addRef} type="file" accept="image/*,application/pdf" className="hidden" onChange={e=>setFile(e.target.files?.[0]||null)}/>
+          <input ref={addRef} type="file" accept="image/*,application/pdf" className="hidden" multiple onChange={e=>setFiles(Array.from(e.target.files||[]))}/>
           <button onClick={()=>addRef.current?.click()}
-            className={`flex items-center gap-1.5 px-3 py-2 border rounded-xl text-xs font-bold transition-all ${file?'bg-emerald-50 border-emerald-200 text-emerald-700':'bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-400'}`}>
+            className={`flex items-center gap-1.5 px-3 py-2 border rounded-xl text-xs font-bold transition-all ${files.length>0?'bg-emerald-50 border-emerald-200 text-emerald-700':'bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-400'}`}>
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-            {file ? <span className="max-w-[120px] truncate">{file.name}</span> : 'Attach file'}
+            {files.length>0 ? <span className="max-w-[120px] truncate">{files.length===1?files[0].name:`${files.length} files`}</span> : 'Attach file'}
           </button>
-          {file && <button onClick={()=>{setFile(null); if(addRef.current) addRef.current.value='';}} className="text-[11px] font-bold text-red-500 hover:text-red-600">Clear</button>}
+          {files.length>0 && <button onClick={()=>{setFiles([]); if(addRef.current) addRef.current.value='';}} className="text-[11px] font-bold text-red-500 hover:text-red-600">Clear</button>}
           <button onClick={add} disabled={!canAdd}
             className="ml-auto flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed">
             {saving ? 'Adding…' : '+ Add Challan'}

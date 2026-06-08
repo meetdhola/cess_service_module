@@ -155,32 +155,62 @@ router.get('/tickets/:id/challans', svcAuth(), async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.post('/tickets/:id/challans', svcAuth(['plc','wireman','admin','superadmin']), async (req, res) => {
-  const challan_no = req.body.challan_no?.toString().trim();
+router.post('/tickets/:id/challans', upload.array('file', 10), svcAuth(['plc','wireman','admin','superadmin']), async (req, res) => {
+  const challan_no = req.body.challan_no?.toString().trim() || null;
   const note       = req.body.note?.toString().trim() || null;
-  if (!challan_no) return res.status(400).json({ error: 'challan_no is required' });
+  // challan_no is optional if a file is attached
+  const files = req.files || [];
+  if (!challan_no && !files.length) return res.status(400).json({ error: 'Provide a challan number or attach a file' });
   try {
     const { rows } = await pool.query(
       `INSERT INTO ticket_challans (ticket_id, challan_no, note, added_by)
        VALUES ($1::uuid, $2, $3, $4::uuid) RETURNING *`,
       [req.params.id, challan_no, note, req.svcUser.id]);
+    const challan = rows[0];
+    // Save multiple uploaded files to the challan
+    if (files.length) {
+      const firstFile = files[0];
+      await pool.query(
+        `UPDATE ticket_challans SET file_url=$1, file_name=$2 WHERE id=$3`,
+        [`/uploads/${firstFile.filename}`, firstFile.originalname, challan.id]
+      ).catch(() => {});
+      // Store additional files if more than one
+      for (const f of files.slice(1)) {
+        await pool.query(
+          `INSERT INTO ticket_challans (ticket_id, challan_no, note, added_by, file_url, file_name)
+           VALUES ($1::uuid, $2, $3, $4::uuid, $5, $6)`,
+          [req.params.id, challan_no, note, req.svcUser.id, `/uploads/${f.filename}`, f.originalname]
+        ).catch(() => {});
+      }
+    }
     req.io?.to('admins').emit('challan:added', { ticket_id: req.params.id, challan_no });
-    res.status(201).json(rows[0]);
+    res.status(201).json(challan);
   } catch (e) {
     console.error('Challan add error:', e);
     res.status(500).json({ error: e.message });
   }
 });
 
-router.patch('/tickets/:id/challans/:challanId', svcAuth(['plc','wireman','admin','superadmin']), async (req, res) => {
-  const challan_no = req.body.challan_no?.toString().trim();
+router.patch('/tickets/:id/challans/:challanId', upload.array('file', 10), svcAuth(['plc','wireman','admin','superadmin']), async (req, res) => {
+  const challan_no = req.body.challan_no?.toString().trim() || null;
   const note       = req.body.note?.toString().trim() ?? null;
-  if (!challan_no) return res.status(400).json({ error: 'challan_no is required' });
+  const files      = req.files || [];
+  if (!challan_no && !files.length) return res.status(400).json({ error: 'Provide a challan number or attach a file' });
   try {
+    // Build update query dynamically
+    const updates = ['note=$2', 'updated_at=NOW()'];
+    const params  = [req.params.challanId, note];
+    let n = 3;
+    if (challan_no) { updates.push(`challan_no=$${n++}`); params.push(challan_no); }
+    if (files.length) {
+      updates.push(`file_url=$${n++}`, `file_name=$${n++}`, `file_size=$${n++}`);
+      params.push(`/uploads/${files[0].filename}`, files[0].originalname, files[0].size);
+    }
+    params.push(req.params.id);
     const { rows } = await pool.query(
-      `UPDATE ticket_challans SET challan_no=$1, note=$2, updated_at=NOW()
-        WHERE id=$3::uuid AND ticket_id=$4::uuid RETURNING *`,
-      [challan_no, note, req.params.challanId, req.params.id]);
+      `UPDATE ticket_challans SET ${updates.join(', ')}
+        WHERE id=$1::uuid AND ticket_id=$${n}::uuid RETURNING *`,
+      params);
     if (!rows.length) return res.status(404).json({ error: 'Challan not found' });
     res.json(rows[0]);
   } catch (e) {

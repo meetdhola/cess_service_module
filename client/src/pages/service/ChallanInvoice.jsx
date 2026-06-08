@@ -11,7 +11,7 @@ import svcApi from '../../serviceApi';
    ════════════════════════════════════════════════════════════════════ */
 
 /* Resolve a stored "/uploads/x" path to the file server origin (:5001). */
-const fileUrl = (u) => !u ? '' : (u.startsWith('http') ? u : `${window.location.protocol}//${window.location.hostname}:5001${u}`);
+const fileUrl = (u) => !u ? '' : (u.startsWith('http') ? u : `${window.location.origin}${u}`);
 
 const isImg = (name='') => ['jpg','jpeg','png','gif','webp','bmp','svg'].includes(name.split('.').pop()?.toLowerCase());
 const isPdf = (name='') => name.split('.').pop()?.toLowerCase() === 'pdf';

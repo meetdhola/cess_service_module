@@ -216,7 +216,7 @@ function PauseAnalyticsSection({ dateFrom, dateTo }) {
                       <tr key={p.id} className="hover:bg-slate-50/60">
                         <td className="px-4 py-3 text-slate-500 whitespace-nowrap">{new Date(p.paused_at).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</td>
                         <td className="px-4 py-3"><span className="font-bold text-slate-800">{p.worker_name}</span> <span className={`ml-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full ${p.worker_role==='plc'?'bg-blue-100 text-blue-700':'bg-emerald-100 text-emerald-700'}`}>{p.worker_role}</span></td>
-                        <td className="px-4 py-3"><span className="font-mono text-[11px] font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">{p.ticket_no}</span></td>
+                        <td className="px-4 py-3"><Link to={`/service/admin/tickets/${p.ticket_no}`} className="font-mono text-[11px] font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md hover:bg-blue-100 transition-all">{p.ticket_no}</Link></td>
                         <td className="px-4 py-3 text-slate-600 max-w-[140px] truncate">{p.customer_name}</td>
                         <td className="px-4 py-3"><span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${meta.bg} ${meta.text} ${meta.border}`}>{meta.ico} {meta.label}</span></td>
                         <td className="px-4 py-3 text-slate-600 max-w-[180px] truncate italic">"{p.reason}"</td>
@@ -510,12 +510,12 @@ function ProfitabilityTab() {
             <p className="text-[10px] text-slate-400 mt-1">From salary</p>
           </div>
           <div className="bg-white rounded-3xl p-5 border border-slate-200/60">
-            <p className="text-xs font-medium text-slate-500 mb-1.5">IRC Cost</p>
+            <p className="text-xs font-medium text-slate-500 mb-1.5">Cost</p>
             <p className="text-2xl font-black text-orange-600">{inr(overview.summary.totalIrcCost)}</p>
             <p className="text-[10px] text-slate-400 mt-1">From rate card</p>
           </div>
           <div className="bg-white rounded-3xl p-5 border-2 border-emerald-200">
-            <p className="text-xs font-medium text-slate-500 mb-1.5">IRC Profit</p>
+            <p className="text-xs font-medium text-slate-500 mb-1.5">Profit</p>
             <p className={`text-2xl font-black ${overview.summary.totalIrcProfit>=0?'text-emerald-600':'text-red-600'}`}>
               {overview.summary.totalIrcProfit>=0?'+':''}{inr(overview.summary.totalIrcProfit)}
             </p>
@@ -562,8 +562,8 @@ function OverviewSection({ sessions, inr }) {
           <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500"/>Revenue</span>
           <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-violet-400"/>Warranty (lost rev)</span>
           <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-amber-500"/>Actual Cost</span>
-          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-orange-500"/>IRC Cost</span>
-          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-blue-600"/>IRC Profit</span>
+          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-orange-500"/>Cost</span>
+          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-blue-600"/>Profit</span>
         </div>
       </div>
       {data.length===0 ? <p className="text-center py-12 text-slate-400">No data</p> : (
@@ -576,8 +576,8 @@ function OverviewSection({ sessions, inr }) {
             <Bar dataKey="revenue"          name="Revenue"          fill="#10b981" radius={[3,3,0,0]} maxBarSize={12}/>
             <Bar dataKey="foregone_revenue" name="Warranty (lost)"  fill="#a78bfa" radius={[3,3,0,0]} maxBarSize={12}/>
             <Bar dataKey="actual_cost"      name="Actual Cost"      fill="#f59e0b" radius={[3,3,0,0]} maxBarSize={12}/>
-            <Bar dataKey="irc_cost"         name="IRC Cost"         fill="#ea580c" radius={[3,3,0,0]} maxBarSize={12}/>
-            <Bar dataKey="irc_profit"       name="IRC Profit"       fill="#2563eb" radius={[3,3,0,0]} maxBarSize={12}/>
+            <Bar dataKey="irc_cost"         name="Cost"         fill="#ea580c" radius={[3,3,0,0]} maxBarSize={12}/>
+            <Bar dataKey="irc_profit"       name="Profit"       fill="#2563eb" radius={[3,3,0,0]} maxBarSize={12}/>
           </BarChart>
         </ResponsiveContainer>
       )}
@@ -589,6 +589,7 @@ function UserWiseSection({ dateFrom, dateTo, granularity, inr }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(null);
+  const [userView, setUserView] = useState({});
 
   useEffect(() => {
     setLoading(true);
@@ -603,11 +604,11 @@ function UserWiseSection({ dateFrom, dateTo, granularity, inr }) {
     data.users,
     [
       {key:'worker_name',label:'Worker'},{key:'worker_role',label:'Role'},{key:'worker_seniority',label:'Seniority'},
-      {key:'monthly_salary',label:'Monthly Salary'},{key:'irc_daily_rate',label:'IRC Daily'},
+      {key:'monthly_salary',label:'Monthly Salary'},{key:'irc_daily_rate',label:'Daily Rate'},
       {key:'sessions',label:'Sessions'},{key:'hours',label:'Hours'},
-      {key:'actual_cost',label:'Actual Cost'},{key:'irc_cost',label:'IRC Cost'},{key:'revenue',label:'Revenue'},
-      {key:'actual_profit',label:'Actual Profit'},{key:'irc_profit',label:'IRC Profit'},
-      {key:'actual_margin',label:'Actual Margin %'},{key:'irc_margin',label:'IRC Margin %'},
+      {key:'actual_cost',label:'Actual Cost'},{key:'irc_cost',label:'Cost'},{key:'revenue',label:'Revenue'},
+      {key:'actual_profit',label:'Actual Profit'},{key:'irc_profit',label:'Profit'},
+      {key:'actual_margin',label:'Actual Margin %'},{key:'irc_margin',label:'Margin %'},
     ],
     `user_wise_${dateFrom}_${dateTo}.csv`
   );
@@ -626,7 +627,7 @@ function UserWiseSection({ dateFrom, dateTo, granularity, inr }) {
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead className="bg-slate-50/50 border-b border-slate-100">
-            <tr>{['Worker','Role','Sessions','Hours','Salary/mo','IRC/day','Revenue','Actual Cost','IRC Cost','Actual Profit','IRC Profit',''].map(h=>
+            <tr>{['Worker','Role','Sessions','Hours','Salary/mo','IRC/day','Revenue','Actual Cost','Cost','Actual Profit','Profit',''].map(h=>
               <th key={h} className="text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider px-3 py-3 whitespace-nowrap">{h}</th>
             )}</tr>
           </thead>
@@ -654,22 +655,89 @@ function UserWiseSection({ dateFrom, dateTo, granularity, inr }) {
                     <svg className={`w-4 h-4 text-slate-400 transition-transform ${expanded===u.worker_id?'rotate-180':''}`} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
                   </td>
                 </tr>
-                {expanded===u.worker_id && u.timeline.length>0 && (
+                {expanded===u.worker_id && (
                   <tr><td colSpan={12} className="px-4 py-4 bg-blue-50/20">
                     <div className="bg-white rounded-2xl border border-blue-100 p-4">
-                      <p className="text-xs font-black text-slate-700 mb-3">{u.worker_name} — {granularity} breakdown</p>
-                      <ResponsiveContainer width="100%" height={180}>
-                        <BarChart data={u.timeline} margin={{top:5,right:5,left:-10,bottom:0}}>
-                          <CartesianGrid strokeDasharray="2 4" stroke="#e2e8f0" vertical={false}/>
-                          <XAxis dataKey="bucket" tick={{fontSize:9,fill:'#94a3b8'}} axisLine={false} tickLine={false}/>
-                          <YAxis tick={{fontSize:9,fill:'#94a3b8'}} axisLine={false} tickLine={false} tickFormatter={v=>v>=1000?`${(v/1000).toFixed(0)}k`:v}/>
-                          <Tooltip formatter={(v)=>inr(v)} contentStyle={{backgroundColor:'#0f172a',border:'none',borderRadius:'12px',fontSize:'11px'}} itemStyle={{color:'#fff'}} labelStyle={{color:'#fff',fontWeight:700}}/>
-                          <Bar dataKey="revenue"     name="Revenue"   fill="#10b981" radius={[3,3,0,0]} maxBarSize={20}/>
-                          <Bar dataKey="actual_cost" name="ActualCst" fill="#f59e0b" radius={[3,3,0,0]} maxBarSize={20}/>
-                          <Bar dataKey="irc_cost"    name="IRC Cost"  fill="#ea580c" radius={[3,3,0,0]} maxBarSize={20}/>
-                          <Bar dataKey="irc_profit"  name="IRC Profit" fill="#2563eb" radius={[3,3,0,0]} maxBarSize={20}/>
-                        </BarChart>
-                      </ResponsiveContainer>
+                      {/* Toggle */}
+                      <div className="flex items-center justify-between mb-3">
+                        <p className="text-xs font-black text-slate-700">{u.worker_name}</p>
+                        <div className="flex gap-1 bg-slate-100 rounded-lg p-0.5">
+                          <button onClick={()=>setUserView(p=>({...p,[u.worker_id]:'monthly'}))}
+                            className={`text-[11px] font-bold px-3 py-1 rounded-md transition-all ${(userView[u.worker_id]||'monthly')==='monthly'?'bg-white text-slate-900 shadow-sm':'text-slate-500 hover:text-slate-700'}`}>
+                            Monthly
+                          </button>
+                          <button onClick={()=>setUserView(p=>({...p,[u.worker_id]:'tickets'}))}
+                            className={`text-[11px] font-bold px-3 py-1 rounded-md transition-all ${(userView[u.worker_id]||'monthly')==='tickets'?'bg-white text-slate-900 shadow-sm':'text-slate-500 hover:text-slate-700'}`}>
+                            Ticket-wise
+                          </button>
+                        </div>
+                      </div>
+                      {/* Monthly chart */}
+                      {(userView[u.worker_id]||'monthly')==='monthly' && u.timeline.length>0 && (
+                        <ResponsiveContainer width="100%" height={180}>
+                          <BarChart data={u.timeline} margin={{top:5,right:5,left:-10,bottom:0}}>
+                            <CartesianGrid strokeDasharray="2 4" stroke="#e2e8f0" vertical={false}/>
+                            <XAxis dataKey="bucket" tick={{fontSize:9,fill:'#94a3b8'}} axisLine={false} tickLine={false}/>
+                            <YAxis tick={{fontSize:9,fill:'#94a3b8'}} axisLine={false} tickLine={false} tickFormatter={v=>v>=1000?`${(v/1000).toFixed(0)}k`:v}/>
+                            <Tooltip formatter={(v)=>inr(v)} contentStyle={{backgroundColor:'#0f172a',border:'none',borderRadius:'12px',fontSize:'11px'}} itemStyle={{color:'#fff'}} labelStyle={{color:'#fff',fontWeight:700}}/>
+                            <Bar dataKey="revenue"     name="Revenue"   fill="#10b981" radius={[3,3,0,0]} maxBarSize={20}/>
+                            <Bar dataKey="actual_cost" name="ActualCst" fill="#f59e0b" radius={[3,3,0,0]} maxBarSize={20}/>
+                            <Bar dataKey="irc_cost"    name="Cost"      fill="#ea580c" radius={[3,3,0,0]} maxBarSize={20}/>
+                            <Bar dataKey="irc_profit"  name="Profit"    fill="#2563eb" radius={[3,3,0,0]} maxBarSize={20}/>
+                          </BarChart>
+                        </ResponsiveContainer>
+                      )}
+                      {(userView[u.worker_id]||'monthly')==='monthly' && u.timeline.length===0 && (
+                        <p className="text-center text-xs text-slate-400 py-6">No timeline data.</p>
+                      )}
+                      {/* Ticket-wise */}
+                      {(userView[u.worker_id]||'monthly')==='tickets' && (
+                        <div className="overflow-x-auto">
+                          {u.ticket_breakdown.length>0 && (
+                            <div className="mb-4">
+                              <ResponsiveContainer width="100%" height={160}>
+                                <BarChart data={u.ticket_breakdown} margin={{top:5,right:5,left:-10,bottom:0}}>
+                                  <CartesianGrid strokeDasharray="2 4" stroke="#e2e8f0" vertical={false}/>
+                                  <XAxis dataKey="ticket_no" tick={{fontSize:9,fill:'#94a3b8'}} axisLine={false} tickLine={false}/>
+                                  <YAxis tick={{fontSize:9,fill:'#94a3b8'}} axisLine={false} tickLine={false} tickFormatter={v=>`${v}h`}/>
+                                  <Tooltip formatter={(v)=>`${v}h`} contentStyle={{backgroundColor:'#0f172a',border:'none',borderRadius:'12px',fontSize:'11px'}} itemStyle={{color:'#fff'}} labelStyle={{color:'#fff',fontWeight:700}}/>
+                                  <Bar dataKey="hours" name="Hours" fill="#6366f1" radius={[3,3,0,0]} maxBarSize={24}/>
+                                </BarChart>
+                              </ResponsiveContainer>
+                            </div>
+                          )}
+                          <table className="w-full text-[11px]">
+                            <thead>
+                              <tr className="border-b border-slate-100">
+                                {['Ticket','Customer','Ref No','Sessions','Hours','Salary/mo','IRC/day','Revenue','Actual Cost','Cost','Actual Profit','Profit'].map(h=>(
+                                  <th key={h} className="text-left py-2 px-2 text-[10px] font-bold text-slate-400 uppercase tracking-wide whitespace-nowrap">{h}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {u.ticket_breakdown.map(t=>(
+                                <tr key={t.ticket_id} className="border-b border-slate-50 hover:bg-slate-50/60">
+                                  <td className="py-2 px-2"><Link to={`/service/admin/tickets/${t.ticket_no}`} className="font-black text-blue-600 hover:underline">{t.ticket_no}</Link></td>
+                                  <td className="py-2 px-2 text-slate-700 max-w-[120px] truncate">{t.customer_name}</td>
+                                  <td className="py-2 px-2 text-slate-500">{t.job_no||'—'}</td>
+                                  <td className="py-2 px-2 text-slate-700 font-bold text-center">{t.sessions}</td>
+                                  <td className="py-2 px-2 text-slate-700 font-bold">{t.hours}h</td>
+                                  <td className="py-2 px-2 text-slate-600">{inr(u.monthly_salary)}</td>
+                                  <td className="py-2 px-2 text-slate-600">{inr(u.irc_daily_rate)}</td>
+                                  <td className="py-2 px-2 font-bold text-emerald-700">{inr(t.revenue)}</td>
+                                  <td className="py-2 px-2 font-bold text-amber-600">{inr(t.actual_cost)}</td>
+                                  <td className="py-2 px-2 font-bold text-orange-600">{inr(t.irc_cost)}</td>
+                                  <td className="py-2 px-2 font-bold text-blue-700">{inr(t.actual_profit)}</td>
+                                  <td className={`py-2 px-2 font-black ${t.irc_profit>=0?'text-emerald-600':'text-red-600'}`}>{t.irc_profit>=0?'+':''}{inr(t.irc_profit)}</td>
+                                </tr>
+                              ))}
+                              {u.ticket_breakdown.length===0 && (
+                                <tr><td colSpan={12} className="text-center py-6 text-slate-400">No tickets in this period.</td></tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
                     </div>
                   </td></tr>
                 )}
@@ -705,7 +773,7 @@ function CustomerWiseSection({ dateFrom, dateTo, granularity, inr }) {
       {key:'customer_name',label:'Customer'},{key:'ticket_count',label:'Tickets'},
       {key:'warranty_sessions',label:'Warranty Sessions'},{key:'billable_sessions',label:'Billable Sessions'},
       {key:'hours',label:'Hours'},{key:'revenue',label:'Revenue'},{key:'foregone_revenue',label:'Warranty Foregone'},
-      {key:'irc_cost',label:'IRC Cost'},{key:'irc_profit',label:'IRC Profit'},{key:'irc_margin',label:'IRC Margin %'},
+      {key:'irc_cost',label:'Cost'},{key:'irc_profit',label:'Profit'},{key:'irc_margin',label:'Margin %'},
     ],
     `customer_wise_${dateFrom}_${dateTo}.csv`
   );
@@ -726,7 +794,7 @@ function CustomerWiseSection({ dateFrom, dateTo, granularity, inr }) {
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead className="bg-slate-50/50 border-b border-slate-100">
-            <tr>{['Customer','Tickets','Sessions','Hours','Revenue','Warranty (lost)','IRC Cost','Actual Profit','IRC Profit',''].map(h=>
+            <tr>{['Customer','Tickets','Sessions','Hours','Revenue','Warranty (lost)','Cost','Actual Profit','Profit',''].map(h=>
               <th key={h} className="text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider px-3 py-3 whitespace-nowrap">{h}</th>
             )}</tr>
           </thead>
@@ -776,13 +844,13 @@ function CustomerWiseSection({ dateFrom, dateTo, granularity, inr }) {
                                 <tr className="text-left text-[9px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-100">
                                   <th className="py-2">Ticket</th><th>Warranty</th><th>Invoice</th><th>Workers</th><th>Hrs</th>
                                   <th className="text-right">Rate Card</th><th className="text-right">Charged</th><th className="text-right">Diff</th>
-                                  <th>IRC Cost</th><th>IRC Profit</th>
+                                  <th>Cost</th><th>Profit</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-slate-100">
                                 {c.ticket_breakdown.map(t => (
                                   <tr key={t.ticket_id} className={t.warranty_status==='in_warranty'?'bg-violet-50/30':''}>
-                                    <td className="py-2"><span className="font-mono text-[11px] font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">{t.ticket_no}</span></td>
+                                    <td className="py-2"><Link to={`/service/admin/tickets/${t.ticket_no}`} className="font-mono text-[11px] font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md hover:bg-blue-100 transition-all">{t.ticket_no}</Link></td>
                                     <td className="py-2">
                                       {t.warranty_status==='in_warranty'
                                         ? <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 border border-violet-200">⚠ Free</span>
@@ -841,7 +909,7 @@ function CustomerWiseSection({ dateFrom, dateTo, granularity, inr }) {
 
                         {v==='workers' && (
                           <table className="w-full text-[11px]">
-                            <thead><tr className="text-left text-[9px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-100"><th className="py-2">Worker</th><th>Sessions</th><th>Hours</th><th>Revenue</th><th>IRC Cost</th><th>IRC Profit</th></tr></thead>
+                            <thead><tr className="text-left text-[9px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-100"><th className="py-2">Worker</th><th>Sessions</th><th>Hours</th><th>Revenue</th><th>Cost</th><th>Profit</th></tr></thead>
                             <tbody className="divide-y divide-slate-100">
                               {c.worker_breakdown.map(w => (
                                 <tr key={w.worker_id}>
@@ -866,8 +934,8 @@ function CustomerWiseSection({ dateFrom, dateTo, granularity, inr }) {
                               <YAxis tick={{fontSize:9,fill:'#94a3b8'}} axisLine={false} tickLine={false} tickFormatter={v=>v>=1000?`${(v/1000).toFixed(0)}k`:v}/>
                               <Tooltip formatter={(v)=>inr(v)} contentStyle={{backgroundColor:'#0f172a',border:'none',borderRadius:'12px',fontSize:'11px'}} itemStyle={{color:'#fff'}} labelStyle={{color:'#fff',fontWeight:700}}/>
                               <Bar dataKey="revenue"    name="Revenue"    fill="#10b981" radius={[3,3,0,0]} maxBarSize={20}/>
-                              <Bar dataKey="irc_cost"   name="IRC Cost"   fill="#ea580c" radius={[3,3,0,0]} maxBarSize={20}/>
-                              <Bar dataKey="irc_profit" name="IRC Profit" fill="#2563eb" radius={[3,3,0,0]} maxBarSize={20}/>
+                              <Bar dataKey="irc_cost"   name="Cost"   fill="#ea580c" radius={[3,3,0,0]} maxBarSize={20}/>
+                              <Bar dataKey="irc_profit" name="Profit" fill="#2563eb" radius={[3,3,0,0]} maxBarSize={20}/>
                             </BarChart>
                           </ResponsiveContainer>
                         )}
@@ -909,7 +977,7 @@ function AgentWiseSection({ dateFrom, dateTo, granularity, inr }) {
       {key:'worker_count',label:'Workers'},{key:'sessions',label:'Sessions'},
       {key:'warranty_sessions',label:'Warranty Sessions'},{key:'billable_sessions',label:'Billable Sessions'},
       {key:'hours',label:'Hours'},{key:'revenue',label:'Revenue'},{key:'foregone_revenue',label:'Warranty Lost'},
-      {key:'irc_cost',label:'IRC Cost'},{key:'irc_profit',label:'IRC Profit'},{key:'irc_margin',label:'IRC Margin %'},
+      {key:'irc_cost',label:'Cost'},{key:'irc_profit',label:'Profit'},{key:'irc_margin',label:'Margin %'},
     ],
     `agent_wise_${dateFrom}_${dateTo}.csv`
   );
@@ -931,7 +999,7 @@ function AgentWiseSection({ dateFrom, dateTo, granularity, inr }) {
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead className="bg-slate-50/50 border-b border-slate-100">
-            <tr>{['Agent','Customers','Tickets','Sessions','Hours','Revenue','Warranty (lost)','IRC Cost','IRC Profit',''].map(h=>
+            <tr>{['Agent','Customers','Tickets','Sessions','Hours','Revenue','Warranty (lost)','Cost','Profit',''].map(h=>
               <th key={h} className="text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider px-3 py-3 whitespace-nowrap">{h}</th>
             )}</tr>
           </thead>
@@ -999,13 +1067,13 @@ function AgentWiseSection({ dateFrom, dateTo, granularity, inr }) {
                                           <tr className="text-left text-[9px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-100">
                                             <th className="py-2">Ticket ID</th><th>Warranty</th><th>Invoice</th><th>Workers</th><th>Hrs</th>
                                             <th className="text-right">Rate Card</th><th className="text-right">Charged</th><th className="text-right">Diff</th>
-                                            <th>IRC Cost</th><th>IRC Profit</th>
+                                            <th>Cost</th><th>Profit</th>
                                           </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-100">
                                           {c.tickets.map(t => (
                                             <tr key={t.ticket_id} className={t.warranty_status==='in_warranty'?'bg-violet-50/40':''}>
-                                              <td className="py-2"><span className="font-mono text-[11px] font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">{t.ticket_no}</span></td>
+                                              <td className="py-2"><Link to={`/service/admin/tickets/${t.ticket_no}`} className="font-mono text-[11px] font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md hover:bg-blue-100 transition-all">{t.ticket_no}</Link></td>
                                               <td className="py-2">
                                                 {t.warranty_status==='in_warranty'
                                                   ? <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 border border-violet-200">⚠ Free</span>
@@ -1045,7 +1113,7 @@ function AgentWiseSection({ dateFrom, dateTo, granularity, inr }) {
 
                         {v==='workers' && (
                           <table className="w-full text-[11px]">
-                            <thead><tr className="text-left text-[9px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-100"><th className="py-2">Worker</th><th>Sessions</th><th>Hours</th><th>Revenue</th><th>Warranty Lost</th><th>IRC Cost</th><th>IRC Profit</th></tr></thead>
+                            <thead><tr className="text-left text-[9px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-100"><th className="py-2">Worker</th><th>Sessions</th><th>Hours</th><th>Revenue</th><th>Warranty Lost</th><th>Cost</th><th>Profit</th></tr></thead>
                             <tbody className="divide-y divide-slate-100">
                               {a.worker_breakdown.map(w => (
                                 <tr key={w.worker_id}>
@@ -1070,8 +1138,8 @@ function AgentWiseSection({ dateFrom, dateTo, granularity, inr }) {
                               <YAxis tick={{fontSize:9,fill:'#94a3b8'}} axisLine={false} tickLine={false} tickFormatter={v=>v>=1000?`${(v/1000).toFixed(0)}k`:v}/>
                               <Tooltip formatter={(v)=>inr(v)} contentStyle={{backgroundColor:'#0f172a',border:'none',borderRadius:'12px',fontSize:'11px'}} itemStyle={{color:'#fff'}} labelStyle={{color:'#fff',fontWeight:700}}/>
                               <Bar dataKey="revenue"    name="Revenue"    fill="#10b981" radius={[3,3,0,0]} maxBarSize={20}/>
-                              <Bar dataKey="irc_cost"   name="IRC Cost"   fill="#ea580c" radius={[3,3,0,0]} maxBarSize={20}/>
-                              <Bar dataKey="irc_profit" name="IRC Profit" fill="#2563eb" radius={[3,3,0,0]} maxBarSize={20}/>
+                              <Bar dataKey="irc_cost"   name="Cost"   fill="#ea580c" radius={[3,3,0,0]} maxBarSize={20}/>
+                              <Bar dataKey="irc_profit" name="Profit" fill="#2563eb" radius={[3,3,0,0]} maxBarSize={20}/>
                             </BarChart>
                           </ResponsiveContainer>
                         )}
@@ -1231,7 +1299,7 @@ function SalaryEditor() {
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead className="bg-slate-50/50 border-b border-slate-100">
-            <tr>{['Worker','Role','Seniority','Monthly Salary','Working Days','Daily Hrs','IRC Daily Rate','Save'].map(h=>
+            <tr>{['Worker','Role','Seniority','Monthly Salary','Working Days','Daily Hrs','Daily Rate Rate','Save'].map(h=>
               <th key={h} className="text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider px-4 py-3 whitespace-nowrap">{h}</th>
             )}</tr>
           </thead>
@@ -1305,12 +1373,24 @@ function ReportsTab() {
 
   useEffect(()=>{loadAll();},[loadAll]);
 
+  const [personView,    setPersonView]    = useState('daywise');  // 'daywise'|'tickets'
+  const [personTickets, setPersonTickets] = useState([]);
+
   const loadPersonDays = async(w)=>{
-    if(selPerson?.worker_id===w.worker_id){setSelPerson(null);setPersonDays([]);return;}
+    if(selPerson?.worker_id===w.worker_id){setSelPerson(null);setPersonDays([]);setPersonTickets([]);setPersonView('daywise');return;}
     setSelPerson(w);
+    setPersonView('daywise');
+    setPersonTickets([]);
     try{
       const{data}=await svcApi.get(`/reports/person-detail/${w.worker_id}`,{params:{from:dateFrom,to:dateTo}});
       setPersonDays(data.map(r=>({...r,day:fmtD(r.day),hours:+(r.total_seconds/3600).toFixed(2)})));
+    }catch(e){console.error(e);}
+  };
+
+  const loadPersonTickets = async(w)=>{
+    try{
+      const{data}=await svcApi.get(`/reports/person-tickets/${w.worker_id}`,{params:{from:dateFrom,to:dateTo}});
+      setPersonTickets(data);
     }catch(e){console.error(e);}
   };
 
@@ -1422,37 +1502,88 @@ function ReportsTab() {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {persons.map(p => (
-                <tr key={p.worker_id} onClick={()=>loadPersonDays(p)} className={`hover:bg-slate-50/60 cursor-pointer ${selPerson?.worker_id===p.worker_id?'bg-blue-50/40':''}`}>
-                  <td className="px-3 py-3 font-bold text-slate-800">{p.worker_name}</td>
-                  <td className="px-3 py-3"><span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${p.worker_role==='plc'?'bg-blue-100 text-blue-700':'bg-emerald-100 text-emerald-700'}`}>{p.worker_role}</span></td>
-                  <td className="px-3 py-3 text-slate-600">{p.session_count}</td>
-                  <td className="px-3 py-3 font-bold text-slate-800">{p.hours}h</td>
-                </tr>
+                <React.Fragment key={p.worker_id}>
+                  <tr onClick={()=>loadPersonDays(p)} className={`hover:bg-slate-50/60 cursor-pointer ${selPerson?.worker_id===p.worker_id?'bg-blue-50/40':''}`}>
+                    <td className="px-3 py-3 font-bold text-slate-800">{p.worker_name}</td>
+                    <td className="px-3 py-3"><span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${p.worker_role==='plc'?'bg-blue-100 text-blue-700':'bg-emerald-100 text-emerald-700'}`}>{p.worker_role}</span></td>
+                    <td className="px-3 py-3 text-slate-600">{p.session_count}</td>
+                    <td className="px-3 py-3 font-bold text-slate-800">{p.hours}h</td>
+                  </tr>
+                  {selPerson?.worker_id===p.worker_id && (
+                    <tr><td colSpan={4} className="px-3 py-4 bg-blue-50/20">
+                      <div className="bg-white rounded-2xl border border-blue-100 p-4">
+                        {/* Toggle */}
+                        <div className="flex items-center justify-between mb-3">
+                          <p className="text-xs font-black text-slate-700">{selPerson.worker_name}</p>
+                          <div className="flex gap-1 bg-slate-100 rounded-lg p-0.5">
+                            <button onClick={e=>{e.stopPropagation();setPersonView('daywise');}}
+                              className={`text-[11px] font-bold px-3 py-1 rounded-md transition-all ${personView==='daywise'?'bg-white text-slate-900 shadow-sm':'text-slate-500 hover:text-slate-700'}`}>
+                              Day-wise
+                            </button>
+                            <button onClick={e=>{e.stopPropagation();setPersonView('tickets');loadPersonTickets(selPerson);}}
+                              className={`text-[11px] font-bold px-3 py-1 rounded-md transition-all ${personView==='tickets'?'bg-white text-slate-900 shadow-sm':'text-slate-500 hover:text-slate-700'}`}>
+                              Ticket-wise
+                            </button>
+                          </div>
+                        </div>
+                        {/* Day-wise chart */}
+                        {personView==='daywise' && personDays.length>0 && (
+                          <ResponsiveContainer width="100%" height={180}>
+                            <AreaChart data={personDays} margin={{top:5,right:5,left:-20,bottom:0}}>
+                              <defs>
+                                <linearGradient id="pgrad" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.4}/>
+                                  <stop offset="100%" stopColor="#3b82f6" stopOpacity={0}/>
+                                </linearGradient>
+                              </defs>
+                              <CartesianGrid strokeDasharray="2 4" stroke="#e2e8f0" vertical={false}/>
+                              <XAxis dataKey="day" tick={{fontSize:9,fill:'#94a3b8'}} axisLine={false} tickLine={false}/>
+                              <YAxis tick={{fontSize:10,fill:'#94a3b8'}} axisLine={false} tickLine={false}/>
+                              <Tooltip content={<Tip/>}/>
+                              <Area type="monotone" dataKey="hours" stroke="#3b82f6" strokeWidth={2.5} fill="url(#pgrad)"/>
+                            </AreaChart>
+                          </ResponsiveContainer>
+                        )}
+                        {personView==='daywise' && personDays.length===0 && (
+                          <p className="text-center text-xs text-slate-400 py-6">No day-wise data.</p>
+                        )}
+                        {/* Ticket-wise table */}
+                        {personView==='tickets' && (
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-[11px]">
+                              <thead>
+                                <tr className="border-b border-slate-100">
+                                  {['Ticket ID','Customer','Ref No','Sessions','Hours'].map(h=>(
+                                    <th key={h} className="text-left py-2 px-2 text-[10px] font-bold text-slate-400 uppercase tracking-wide whitespace-nowrap">{h}</th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {personTickets.map(t=>(
+                                  <tr key={t.ticket_no} className="border-b border-slate-50 hover:bg-slate-50/60">
+                                    <td className="py-2 px-2"><Link to={`/service/admin/tickets/${t.ticket_no}`} className="font-black text-blue-600 hover:underline">{t.ticket_no}</Link></td>
+                                    <td className="py-2 px-2 text-slate-700 max-w-[150px] truncate">{t.customer_name}</td>
+                                    <td className="py-2 px-2 text-slate-500">{t.job_no||'—'}</td>
+                                    <td className="py-2 px-2 text-slate-700 font-bold text-center">{t.sessions}</td>
+                                    <td className="py-2 px-2 text-slate-700 font-bold">{t.hours}h</td>
+                                  </tr>
+                                ))}
+                                {personTickets.length===0 && (
+                                  <tr><td colSpan={5} className="text-center py-6 text-slate-400">No tickets in this period.</td></tr>
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    </td></tr>
+                  )}
+                </React.Fragment>
               ))}
               {persons.length===0 && <tr><td colSpan={4} className="text-center py-8 text-slate-400">No data.</td></tr>}
             </tbody>
           </table>
         </div>
-        {selPerson && personDays.length > 0 && (
-          <div className="mt-4 pt-4 border-t border-slate-100">
-            <p className="text-xs font-black text-slate-700 mb-3">{selPerson.worker_name} — day-wise</p>
-            <ResponsiveContainer width="100%" height={180}>
-              <AreaChart data={personDays} margin={{top:5,right:5,left:-20,bottom:0}}>
-                <defs>
-                  <linearGradient id="pgrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.4}/>
-                    <stop offset="100%" stopColor="#3b82f6" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="2 4" stroke="#e2e8f0" vertical={false}/>
-                <XAxis dataKey="day" tick={{fontSize:9,fill:'#94a3b8'}} axisLine={false} tickLine={false}/>
-                <YAxis tick={{fontSize:10,fill:'#94a3b8'}} axisLine={false} tickLine={false}/>
-                <Tooltip content={<Tip/>}/>
-                <Area type="monotone" dataKey="hours" stroke="#3b82f6" strokeWidth={2.5} fill="url(#pgrad)"/>
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        )}
       </div>
 
       <PauseAnalyticsSection dateFrom={dateFrom} dateTo={dateTo}/>
@@ -1492,7 +1623,9 @@ export default function AdminDashboard() {
   const [workers,setWorkers]   = useState([]);
   const [allUsers,setAllUsers] = useState([]);
   const [sessions,setSessions] = useState([]);
-  const [filters,setFilters]   = useState({status:'All',priority:'All',service_type:'All',search:''});
+  const [filters,setFilters]   = useState({status:'All',priority:'All',service_type:'All',search:'',sales_agent:'All'});
+  const [ticketDateFrom, setTicketDateFrom] = useState('');
+  const [ticketDateTo,   setTicketDateTo]   = useState('');
   const [expanded,setExpanded] = useState(null);
   const [assignM,setAssignM]   = useState(null);
   const [reopenM, setReopenM] = useState(null);   // ticket being reopened
@@ -1503,18 +1636,37 @@ export default function AdminDashboard() {
   const [busy,setBusy]         = useState(false);
   const [liveEvents,setLiveEvents] = useState([]);
 
-  useSocket({
-    'session:started':   e => { addLive(`▶ ${e.worker?.name} started`,'emerald'); loadSessions(); },
-    'session:paused':    e => { addLive(`⏸ ${e.worker} — ${e.reason}`,'amber'); loadSessions(); },
-    'session:resumed':   e => { addLive(`▶ ${e.worker} resumed`,'blue'); loadSessions(); },
-    'session:completed': e => { addLive(`✓ ${e.worker} done (${fmtH(e.totalSeconds)})`,'slate'); loadSessions(); loadTickets(); },
-  });
   const addLive = (msg,color) => {
     const ts = new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
     setLiveEvents(p=>[{msg,color,ts,id:Date.now()},...p].slice(0,15));
   };
 
-  const loadTickets  = useCallback(async()=>{try{const p={};if(filters.status!=='All')p.status=filters.status;if(filters.priority!=='All')p.priority=filters.priority;if(filters.service_type!=='All')p.service_type=filters.service_type;if(filters.search)p.search=filters.search;const{data}=await svcApi.get('/tickets',{params:p});setTickets(data);}catch(e){console.error(e);}},[filters]);
+  // Pre-populate live activity from recent sessions on mount
+  React.useEffect(()=>{
+    svcApi.get('/sessions/all').then(({data})=>{
+      if (!Array.isArray(data)) return;
+      const recent = data.slice(0,8).map(s=>{
+        const ts = s.started_at
+          ? new Date(s.started_at).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})
+          : '';
+        if (s.status==='running')
+          return {msg:`▶ ${s.worker_name} working on ${s.ticket_no||'ticket'}`,color:'emerald',ts,id:s.id+'_r'};
+        if (s.status==='paused')
+          return {msg:`⏸ ${s.worker_name} paused`,color:'amber',ts,id:s.id+'_p'};
+        return {msg:`✓ ${s.worker_name} completed (${fmtH(s.total_seconds)})`,color:'slate',ts,id:s.id+'_c'};
+      });
+      setLiveEvents(recent);
+    }).catch(()=>{});
+  },[]);
+
+  useSocket({
+    'session:started':   e => { addLive(`▶ ${e.worker?.name || e.worker} started`,'emerald'); loadSessions(); },
+    'session:paused':    e => { addLive(`⏸ ${e.worker} — ${e.reason}`,'amber'); loadSessions(); },
+    'session:resumed':   e => { addLive(`▶ ${e.worker} resumed`,'blue'); loadSessions(); },
+    'session:completed': e => { addLive(`✓ ${e.worker} done (${fmtH(e.totalSeconds)})`,'slate'); loadSessions(); loadTickets(); },
+  });
+
+  const loadTickets  = useCallback(async()=>{try{const p={};if(filters.status!=='All')p.status=filters.status;if(filters.priority!=='All')p.priority=filters.priority;if(filters.service_type!=='All')p.service_type=filters.service_type;if(filters.search)p.search=filters.search;if(filters.sales_agent!=='All')p.sales_agent=filters.sales_agent;if(ticketDateFrom)p.date_from=ticketDateFrom;if(ticketDateTo)p.date_to=ticketDateTo;const{data}=await svcApi.get('/tickets',{params:p});setTickets(data);}catch(e){console.error(e);}},[filters,ticketDateFrom,ticketDateTo]);
   const deleteTicket = useCallback((tk) => {
     setDeleteConfirm(tk);
   }, []);
@@ -1928,18 +2080,36 @@ const wireW = workers.filter(w => w.role === 'wireman' || (w.role === 'admin' &&
               </div>
 
               <div className="bg-white rounded-3xl border border-slate-200/60 overflow-hidden">
-                <div className="flex flex-wrap gap-2 p-5 border-b border-slate-100">
+                <div className="flex flex-wrap gap-2 p-4 border-b border-slate-100 items-center">
+                  {/* Search */}
                   <input className="flex-1 min-w-36 px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-2xl text-xs outline-none focus:border-slate-400" placeholder="🔍  Search ticket, customer…" value={filters.search} onChange={e=>setFilters(p=>({...p,search:e.target.value}))}/>
+                  {/* Date range */}
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Range</span>
+                    <input type="date" value={ticketDateFrom} onChange={e=>setTicketDateFrom(e.target.value)} className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-2xl text-xs outline-none focus:border-slate-400 text-slate-700"/>
+                    <span className="text-slate-300 text-xs">→</span>
+                    <input type="date" value={ticketDateTo} onChange={e=>setTicketDateTo(e.target.value)} className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-2xl text-xs outline-none focus:border-slate-400 text-slate-700"/>
+                    <button onClick={loadTickets} className="px-4 py-2 bg-slate-900 text-white text-xs font-bold rounded-2xl hover:bg-slate-800 transition-all">Apply</button>
+                    {(ticketDateFrom||ticketDateTo) && <button onClick={()=>{setTicketDateFrom('');setTicketDateTo('');}} className="px-3 py-2 bg-slate-100 text-slate-600 text-xs font-bold rounded-2xl hover:bg-slate-200 transition-all">✕</button>}
+                  </div>
+                  {/* Existing filters */}
                   {[['status',['All','Open','Assigned','In Progress','Completed','Closed']],['priority',['All','High','Medium','Low']],['service_type',['All','installation','troubleshooting','new_development','after_sales']]].map(([k,opts])=>(
                     <select key={k} className="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-2xl text-xs outline-none focus:border-slate-400 text-slate-700" value={filters[k]} onChange={e=>setFilters(p=>({...p,[k]:e.target.value}))}>
                       {opts.map(o=><option key={o} value={o}>{o==='All'?`All ${k.replace(/_/g,' ')}`:SVC_L[o]||o}</option>)}
                     </select>
                   ))}
+                  {/* Sales Agent filter */}
+                  <select className="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-2xl text-xs outline-none focus:border-slate-400 text-slate-700" value={filters.sales_agent} onChange={e=>setFilters(p=>({...p,sales_agent:e.target.value}))}>
+                    <option value="All">All Sales Agents</option>
+                    {[...new Set(tickets.map(t=>t.sales_agent).filter(Boolean))].sort().map(a=>(
+                      <option key={a} value={a}>{a}</option>
+                    ))}
+                  </select>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs">
                     <thead className="bg-slate-50/50 border-b border-slate-100">
-                      <tr>{['Ticket','Customer','Sales Agent','Created By','Service','Priority','Status','PLC','Wireman','Date','Actions'].map(h=><th key={h} className="text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider px-4 py-3 whitespace-nowrap">{h}</th>)}</tr>
+                      <tr>{['Ticket','Customer','Sales Agent','Created By','Service','Ref No','Priority','Status','PLC','Wireman','Date','Actions'].map(h=><th key={h} className="text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider px-4 py-3 whitespace-nowrap">{h}</th>)}</tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {!tickets.length?<tr><td colSpan={9} className="text-center py-16 text-slate-400">No tickets found.</td></tr>:tickets.map(tk=>{
@@ -1962,13 +2132,22 @@ const wireW = workers.filter(w => w.role === 'wireman' || (w.role === 'admin' &&
                                 )}
                                 </p></td>
                               <td className="px-4 py-3.5 text-slate-600 whitespace-nowrap">{SVC_L[tk.service_type]||tk.service_type}</td>
+                              <td className="px-4 py-3.5">
+                                {tk.job_no ? <span className="font-mono text-[11px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-lg">{tk.job_no}</span> : <span className="text-slate-300 text-[11px]">—</span>}
+                              </td>
                               <td className="px-4 py-3.5"><span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${PR_CLR[tk.priority]}`}>{tk.priority}</span></td>
                               <td className="px-4 py-3.5">
                                 <div className="flex flex-col gap-1 items-start">
                                   {isDone
                                     ? <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${ST_CLR[tk.status]}`}>{tk.status}</span>
                                     : <select className="text-[11px] font-semibold px-2 py-1 rounded-lg border border-slate-200 outline-none cursor-pointer bg-white text-slate-700 focus:border-slate-400" value={tk.status} onChange={e=>updateStatus(tk.id,e.target.value)}>
-                                        {['Open','Assigned','In Progress','Completed','Closed'].map(s=><option key={s}>{s}</option>)}
+                                        {[
+                                          {v:'Open',l:'Open'},
+                                          {v:'Assigned',l:'Assigned'},
+                                          {v:'In Progress',l:'In Progress'},
+                                          {v:'Report Submitted',l:'Completed'},
+                                          {v:'Closed',l:'Closed'},
+                                        ].map(s=><option key={s.v} value={s.v}>{s.l}</option>)}
                                       </select>}
                                   {tk.status === 'Completed' && !isWarranty && <BillingStateBadge ticketId={tk.id}/>}
                                 </div>
@@ -2234,7 +2413,7 @@ const wireW = workers.filter(w => w.role === 'wireman' || (w.role === 'admin' &&
                               <span className="font-bold text-slate-800">{s.worker_name}</span>
                             </div>
                           </td>
-                          <td className="px-4 py-3"><span className="font-mono text-[11px] font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">{s.ticket_no}</span></td>
+                          <td className="px-4 py-3"><Link to={`/service/admin/tickets/${s.ticket_no}`} className="font-mono text-[11px] font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md hover:bg-blue-100 transition-all">{s.ticket_no}</Link></td>
                           <td className="px-4 py-3 text-slate-600 max-w-[160px] truncate">{s.customer_name}</td>
                           <td className="px-4 py-3">
                             {s.status==='running' && <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-emerald-700"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"/>Running</span>}

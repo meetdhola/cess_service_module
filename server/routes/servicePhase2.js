@@ -235,7 +235,7 @@ router.delete('/tickets/:id/challans/:challanId', svcAuth(['plc','wireman','admi
 router.get('/tickets/:id/notes', svcAuth(), async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT tn.id, tn.body, tn.created_at,
+      `SELECT tn.id, tn.body, tn.created_at, tn.edited_at, tn.is_unsent, tn.original_body,
               tn.author_id, su.name AS author_name, su.role AS author_role
          FROM ticket_notes tn
          LEFT JOIN service_users su ON su.id = tn.author_id
@@ -596,14 +596,12 @@ router.get('/tickets/:id/full', svcAuth(), async (req, res) => {
         report_url:       toUrl(b.completion_report_path),
         expense_file_url: toUrl(b.expense_file_path),
         // All files including extras
-        all_report_files: [
-          ...(b.completion_report_path ? [{ url: toUrl(b.completion_report_path), name: 'Report' }] : []),
-          ...extraReports,
-        ],
-        all_expense_files: [
-          ...(b.expense_file_path ? [{ url: toUrl(b.expense_file_path), name: 'Expense proof' }] : []),
-          ...extraExpenses,
-        ],
+         all_report_files: extraReports.length > 0
+           ? extraReports
+           : (b.completion_report_path ? [{ url: toUrl(b.completion_report_path), name: 'Report' }] : []),
+         all_expense_files: extraExpenses.length > 0
+           ? extraExpenses
+           : (b.expense_file_path ? [{ url: toUrl(b.expense_file_path), name: 'Expense proof' }] : []),
       };
     });
     res.json({
@@ -712,6 +710,55 @@ router.get('/tickets/:id/mention-suggestions', svcAuth(), async (req, res) => {
         LIMIT 10`,
       [q, `%${q}%`]);
     res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── PATCH /api/service/tickets/:id/notes/:noteId — edit note (within 10 min) ──
+router.patch('/tickets/:id/notes/:noteId', svcAuth(), async (req, res) => {
+  const newBody = req.body.body?.toString().trim();
+  if (!newBody) return res.status(400).json({ error: 'body required' });
+  try {
+    const { rows } = await pool.query(
+      `SELECT * FROM ticket_notes WHERE id=$1 AND ticket_id=$2`, [req.params.noteId, req.params.id]);
+    if (!rows.length) return res.status(404).json({ error: 'Note not found' });
+    const note = rows[0];
+    if (note.author_id !== req.svcUser.id) return res.status(403).json({ error: 'Not your note' });
+    const ageMin = (Date.now() - new Date(note.created_at).getTime()) / 60000;
+    if (ageMin > 10) return res.status(400).json({ error: 'Edit window expired (10 min)' });
+    const { rows: updated } = await pool.query(
+      `UPDATE ticket_notes
+         SET body=$1, edited_at=NOW(), original_body=COALESCE(original_body,$2)
+       WHERE id=$3 RETURNING *`,
+      [newBody, note.body, req.params.noteId]);
+    const result = { ...updated[0], author_name: req.svcUser.name, author_role: req.svcUser.role };
+    req.io?.to('admins').emit('note:edited', { ticket_id: req.params.id, note: result });
+    const { rows: assigned } = await pool.query(
+      `SELECT worker_id FROM ticket_assignments WHERE ticket_id=$1`, [req.params.id]);
+    for (const { worker_id } of assigned) {
+      req.io?.to(`user:${worker_id}`).emit('note:edited', { ticket_id: req.params.id, note: result });
+    }
+    res.json(result);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── DELETE /api/service/tickets/:id/notes/:noteId — unsend note (within 10 min) ──
+router.delete('/tickets/:id/notes/:noteId', svcAuth(), async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT * FROM ticket_notes WHERE id=$1 AND ticket_id=$2`, [req.params.noteId, req.params.id]);
+    if (!rows.length) return res.status(404).json({ error: 'Note not found' });
+    const note = rows[0];
+    if (note.author_id !== req.svcUser.id) return res.status(403).json({ error: 'Not your note' });
+    const ageMin = (Date.now() - new Date(note.created_at).getTime()) / 60000;
+    if (ageMin > 10) return res.status(400).json({ error: 'Unsend window expired (10 min)' });
+    await pool.query(`UPDATE ticket_notes SET is_unsent=TRUE WHERE id=$1`, [req.params.noteId]);
+    req.io?.to('admins').emit('note:unsent', { ticket_id: req.params.id, noteId: req.params.noteId });
+    const { rows: assigned } = await pool.query(
+      `SELECT worker_id FROM ticket_assignments WHERE ticket_id=$1`, [req.params.id]);
+    for (const { worker_id } of assigned) {
+      req.io?.to(`user:${worker_id}`).emit('note:unsent', { ticket_id: req.params.id, noteId: req.params.noteId });
+    }
+    res.json({ success: true, noteId: req.params.noteId });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

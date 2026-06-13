@@ -10,6 +10,7 @@ import { ChallanPanel, InvoiceEditor } from './ChallanInvoice';
 import { ReopenModal, ReopenHistory }  from './ReopenComponents';
 import NotesPanel from './NotesPanel';
 import ScheduledTasksPanel from './ScheduledTasksPanel';
+import TicketPdfReport from './TicketPdfReport';
 
 const inrFmt = n => `₹${Number(n||0).toLocaleString('en-IN',{maximumFractionDigits:0})}`;
 
@@ -453,6 +454,7 @@ export default function TicketDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState(null);
   const [reopenOpen, setReopenOpen] = useState(false);
+  const [pdfOpen, setPdfOpen] = useState(false);
   const [closing, setClosing] = useState(false);
 
   const isAdmin       = svcUser?.role === 'admin' || svcUser?.role === 'superadmin';
@@ -558,6 +560,14 @@ export default function TicketDetailPage() {
           <div className="flex items-center gap-2 ml-auto flex-shrink-0">
             {isWorker && <WorkerActions ticket={ticket} billing={billing} onAnyChange={load}/>}
 
+            {isAdmin && (
+              <button onClick={()=>setPdfOpen(true)}
+                className="flex items-center gap-1.5 px-3 sm:px-4 py-2 bg-white border border-slate-200 hover:border-slate-300 text-slate-700 text-xs font-bold rounded-2xl transition-all">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Report
+              </button>
+            )}
+
             {can('close_ticket') && ticket.status === 'Report Submitted' && (
               canActOnClosure ? (
                 <button onClick={closeTicket} disabled={closing}
@@ -616,6 +626,7 @@ export default function TicketDetailPage() {
                     needs_wiring: ticket.needs_wiring,
                     plc_type: ticket.plc_type || '',
                     deadline_date: ticket.deadline_date ? ticket.deadline_date.split('T')[0] : '',
+                    job_no: ticket.job_no || '',
                   }); setEditing(true); }}
                     className="text-[11px] font-bold px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 transition-all">
                     ✏️ Edit
@@ -626,6 +637,7 @@ export default function TicketDetailPage() {
                 {[
                   ['Service',    ticket.service_type?.replace(/_/g,' ')],
                   ['Created',    fmtDate(ticket.created_at)],
+                  ['Ref No',     ticket.job_no || '—'],
                   ['Created by', ticket.created_by_name || '—'],
                   ['Sales agent',ticket.sales_agent || '—'],
                   ['Deadline',   ticket.deadline_date ? new Date(ticket.deadline_date).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}) : '—'],
@@ -707,6 +719,10 @@ export default function TicketDetailPage() {
                       <input type="date" className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:border-slate-400" value={editForm.deadline_date||''} onChange={e=>setEditForm(p=>({...p,deadline_date:e.target.value}))}/>
                     </div>
                     <div>
+                      <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Ref No <span className="text-slate-400 font-normal">(optional)</span></p>
+                      <input className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:border-slate-400" placeholder="e.g. REF/2026/001" value={editForm.job_no||''} onChange={e=>setEditForm(p=>({...p,job_no:e.target.value}))}/>
+                    </div>
+                    <div>
                       <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Address</p>
                       <input className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:border-slate-400" value={editForm.address||''} onChange={e=>setEditForm(p=>({...p,address:e.target.value}))}/>
                     </div>
@@ -714,10 +730,37 @@ export default function TicketDetailPage() {
                   <div>
                     <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Description</p>
                     <textarea rows={3} className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:border-slate-400 resize-none" value={editForm.description||''} onChange={e=>setEditForm(p=>({...p,description:e.target.value}))}/>
+                  {/* PLC / Wiring toggles */}
+                  <div className="col-span-full">
+                    <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">Work Required</p>
+                    <div className="flex gap-3 flex-wrap">
+                      <button type="button"
+                        onClick={() => setEditForm(p => ({ ...p, needs_plc: !p.needs_plc }))}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-xl border text-xs font-bold transition-all ${
+                          editForm.needs_plc ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
+                        }`}>
+                        🖥 PLC Engineer {editForm.needs_plc && '✓'}
+                      </button>
+                      <button type="button"
+                        onClick={() => setEditForm(p => ({ ...p, needs_wiring: !p.needs_wiring }))}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-xl border text-xs font-bold transition-all ${
+                          editForm.needs_wiring ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
+                        }`}>
+                        ⚡ Wireman {editForm.needs_wiring && '✓'}
+                      </button>
+                    </div>
+                    {!editForm.needs_plc && !editForm.needs_wiring && (
+                      <p className="text-[10px] text-red-500 mt-1">At least one must be selected</p>
+                    )}
+                  </div>
                   </div>
                   <div className="flex gap-2 justify-end pt-1">
                     <button onClick={()=>setEditing(false)} className="px-4 py-2 text-xs font-bold border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 transition-all">Cancel</button>
                     <button onClick={async()=>{
+                      if (!editForm.needs_plc && !editForm.needs_wiring) {
+                        alert('At least one of PLC Engineer or Wireman must be selected');
+                        return;
+                      }
                       try{
                         await svcApi.patch(`/tickets/${ticket.id}/edit`, editForm);
                         setEditing(false);
@@ -838,7 +881,12 @@ export default function TicketDetailPage() {
           onSuccess={()=>{ setReopenOpen(false); load(); }}
         />
       )}
+
+      {pdfOpen && data && (
+        <TicketPdfReport data={data} onClose={()=>setPdfOpen(false)}/>
+      )}
     </div>
+
   );
 }
 

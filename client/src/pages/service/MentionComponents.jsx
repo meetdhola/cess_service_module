@@ -204,7 +204,7 @@ export function MentionInput({ ticketId, value, onChange, onSubmit, disabled, pl
         style={{ scrollbarWidth: 'thin' }}
       />
       {showMenu && (
-        <div className="absolute left-0 bottom-full mb-1.5 w-80 max-w-[calc(100vw-2rem)] bg-white rounded-2xl border border-slate-200 shadow-2xl shadow-slate-900/15 overflow-hidden z-50 animate-fade-in">
+        <div className="absolute left-0 bottom-full mb-1.5 w-80 max-w-[calc(100vw-2rem)] bg-white rounded-2xl border border-slate-200 shadow-2xl shadow-slate-900/15 overflow-hidden animate-fade-in" style={{zIndex:9999}}>
           <div className="max-h-72 overflow-y-auto">
             {loading && !suggestions.length ? (
               <div className="px-3 py-3 text-[11px] text-slate-400">Searching…</div>

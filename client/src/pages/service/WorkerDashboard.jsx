@@ -1051,7 +1051,9 @@ export default function WorkerDashboard() {
   const tab = VALID_TABS.includes(urlTab) ? urlTab : 'tasks';
   const setTab = (newTab) => navigate(`/service/worker/${newTab}`);
   const [tickets,   setTickets]   = useState([]);
-  const [taskFilter, setTaskFilter] = useState('All');
+  const [taskFilter,    setTaskFilter]    = useState('All');
+  const [taskDateFrom,  setTaskDateFrom]  = useState('');
+  const [taskDateTo,    setTaskDateTo]    = useState('');
   const [history,   setHistory]   = useState([]);
 const [sessions,  setSessions]  = useState({});   // ticketId -> session object (running|paused)
   const [elapsed,   setElapsed]   = useState({});   // ticketId -> seconds
@@ -1086,9 +1088,13 @@ const [sessions,  setSessions]  = useState({});   // ticketId -> session object 
 
   useEffect(() => { loadTickets(); loadHistory(); loadActive(); }, []); /* mount only */
   // One interval ticks every RUNNING session each second; paused ones hold.
-  const anyRunning = Object.values(sessions).some(s => s?.status === 'running');
   useEffect(() => {
-    if (!anyRunning) { clearInterval(tick.current); return; }
+    const anyRunning = Object.values(sessions).some(s => s?.status === 'running');
+    if (!anyRunning) {
+      if (tick.current) { clearInterval(tick.current); tick.current = null; }
+      return;
+    }
+    if (tick.current) clearInterval(tick.current);
     tick.current = setInterval(() => {
       setElapsed(prev => {
         const next = { ...prev };
@@ -1098,8 +1104,8 @@ const [sessions,  setSessions]  = useState({});   // ticketId -> session object 
         return next;
       });
     }, 1000);
-    return () => clearInterval(tick.current);
-  }, [anyRunning, sessions]);
+    return () => { clearInterval(tick.current); tick.current = null; };
+  }, [sessions]);
 
 const startTimer = async (id, needsAssign=false) => {
     setBusy(true);
@@ -1159,17 +1165,31 @@ const startTimer = async (id, needsAssign=false) => {
   const av    = svcUser?.name?.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()||'??';
   const isPLC = svcUser?.role==='plc';
   const totalWorked = history.reduce((a,s)=>a+(s.total_seconds||0),0);
-  const counts = { total:tickets.length, pending:tickets.filter(t=>['Open','Assigned'].includes(t.status)).length, active:tickets.filter(t=>t.status==='In Progress').length, done:tickets.filter(t=>t.status==='Completed').length };
+  const DONE_STATUSES = ['Completed','Closed','Report Submitted'];
+  const counts = { total:tickets.length, pending:tickets.filter(t=>['Open','Assigned'].includes(t.status)).length, active:tickets.filter(t=>t.status==='In Progress').length, done:tickets.filter(t=>DONE_STATUSES.includes(t.status)).length };
 
-  // Build 7-day chart data from history
+  // Build 7-day chart data from history using daily_seconds for accuracy
   const chartData = (() => {
     const days = [];
     for (let i=6; i>=0; i--) {
       const d = new Date(); d.setDate(d.getDate()-i);
       const key = d.toISOString().slice(0,10);
-      const dayHist = history.filter(h=>String(h.created_at).slice(0,10)===key);
-      const total = dayHist.reduce((a,h)=>a+(h.total_seconds||0),0);
-      days.push({ day: d.toLocaleDateString('en-IN',{weekday:'short'}), Hours: +(total/3600).toFixed(1), Sessions: dayHist.length });
+      let total = 0;
+      let sessionCount = 0;
+      for (const h of history) {
+        const daily = h.daily_seconds;
+        if (daily && typeof daily === 'object' && daily[key] !== undefined) {
+          total += daily[key];
+          sessionCount += 1;
+        } else if (!daily || Object.keys(daily).length === 0) {
+          // Fallback for old sessions without daily_seconds
+          if (String(h.started_at||h.created_at).slice(0,10) === key) {
+            total += h.total_seconds || 0;
+            sessionCount += 1;
+          }
+        }
+      }
+      days.push({ day: d.toLocaleDateString('en-IN',{weekday:'short'}), Hours: +(total/3600).toFixed(1), Sessions: sessionCount });
     }
     return days;
   })();
@@ -1291,9 +1311,33 @@ const startTimer = async (id, needsAssign=false) => {
               {/* LEFT — tasks list */}
               <div className="space-y-4 min-w-0">
                 <div className="bg-white rounded-3xl border border-slate-200/60 overflow-hidden">
-                  <div className="px-6 py-4 border-b border-slate-100">
-                    <h3 className="text-sm font-black text-slate-900">Assigned Tasks</h3>
-                    <p className="text-[11px] text-slate-400 mt-0.5">{tickets.length} total · click any task to open</p>
+                  <div className="px-5 py-4 border-b border-slate-100">
+                    <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
+                      <div>
+                        <h3 className="text-sm font-black text-slate-900">Assigned Tasks</h3>
+                        <p className="text-[11px] text-slate-400 mt-0.5">{tickets.length} total · click any task to open</p>
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {[
+                          {label:'Today',      fn:()=>{const t=new Date().toISOString().slice(0,10);setTaskDateFrom(t);setTaskDateTo(t);}},
+                          {label:'This Week',  fn:()=>{const now=new Date();const mon=new Date(now);mon.setDate(now.getDate()-now.getDay()+1);setTaskDateFrom(mon.toISOString().slice(0,10));setTaskDateTo(now.toISOString().slice(0,10));}},
+                          {label:'This Month', fn:()=>{const now=new Date();setTaskDateFrom(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`);setTaskDateTo(now.toISOString().slice(0,10));}},
+                          {label:'All',        fn:()=>{setTaskDateFrom('');setTaskDateTo('');}},
+                        ].map(b=>(
+                          <button key={b.label} onClick={b.fn}
+                            className={`px-3 py-1 text-[10px] font-bold rounded-full border transition-all ${b.label==='All'&&!taskDateFrom&&!taskDateTo?'bg-slate-900 text-white border-slate-900':'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-900 hover:text-white hover:border-slate-900'}`}>
+                            {b.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Range</span>
+                      <input type="date" value={taskDateFrom} onChange={e=>setTaskDateFrom(e.target.value)} className="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-slate-400 text-slate-700"/>
+                      <span className="text-slate-300 text-xs">→</span>
+                      <input type="date" value={taskDateTo} onChange={e=>setTaskDateTo(e.target.value)} className="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-slate-400 text-slate-700"/>
+                      {(taskDateFrom||taskDateTo)&&<button onClick={()=>{setTaskDateFrom('');setTaskDateTo('');}} className="text-[10px] font-bold text-slate-400 hover:text-slate-600 px-2 py-1 rounded-lg hover:bg-slate-100">✕ Clear</button>}
+                    </div>
                   </div>
                   {/* Status filter tabs */}
                   <div className="px-3 py-2 border-b border-slate-100 overflow-x-auto scrollbar-hide">
@@ -1302,7 +1346,7 @@ const startTimer = async (id, needsAssign=false) => {
                         { k:'All',           label:'All',         count: tickets.length,                                                              dot:'bg-slate-400' },
                         { k:'Pending',       label:'Pending',     count: tickets.filter(t=>['Open','Assigned'].includes(t.status)).length,           dot:'bg-amber-400' },
                         { k:'In Progress',   label:'In Progress', count: tickets.filter(t=>t.status==='In Progress').length,                          dot:'bg-blue-500'  },
-                        { k:'Completed',     label:'Completed',   count: tickets.filter(t=>['Completed','Closed'].includes(t.status)).length,        dot:'bg-emerald-500' },
+                        { k:'Completed',     label:'Completed',   count: tickets.filter(t=>['Completed','Closed','Report Submitted'].includes(t.status)).length, dot:'bg-emerald-500' },
                       ].map(t => (
                         <button key={t.k} onClick={()=>setTaskFilter(t.k)}
                           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold transition-all whitespace-nowrap ${
@@ -1318,11 +1362,18 @@ const startTimer = async (id, needsAssign=false) => {
                     </div>
                   </div>
                   {(() => {
+                    const dateFiltered = tickets.filter(t => {
+                      if (!taskDateFrom && !taskDateTo) return true;
+                      const d = t.created_at?.slice(0,10) || '';
+                      if (taskDateFrom && d < taskDateFrom) return false;
+                      if (taskDateTo   && d > taskDateTo)   return false;
+                      return true;
+                    });
                     const filtered =
-                      taskFilter === 'Pending'       ? tickets.filter(t=>['Open','Assigned'].includes(t.status)) :
-                      taskFilter === 'In Progress'   ? tickets.filter(t=>t.status==='In Progress') :
-                      taskFilter === 'Completed'     ? tickets.filter(t=>['Completed','Closed'].includes(t.status)) :
-                      tickets;
+                      taskFilter === 'Pending'       ? dateFiltered.filter(t=>['Open','Assigned'].includes(t.status)) :
+                      taskFilter === 'In Progress'   ? dateFiltered.filter(t=>t.status==='In Progress') :
+                      taskFilter === 'Completed'     ? dateFiltered.filter(t=>['Completed','Closed','Report Submitted'].includes(t.status)) :
+                      dateFiltered;
 
                     if (!tickets.length) return (
                       <div className="text-center py-16">
@@ -1338,9 +1389,35 @@ const startTimer = async (id, needsAssign=false) => {
                       </div>
                     );
 
+                    // Group tickets by date
+                    const groupByDate = (tks) => {
+                      const groups = {};
+                      tks.forEach(tk => {
+                        const d = new Date(tk.created_at);
+                        const key = d.toDateString();
+                        if (!groups[key]) groups[key] = { label: (() => {
+                          const today = new Date().toDateString();
+                          const yesterday = new Date(Date.now()-86400000).toDateString();
+                          if (key===today) return 'Today';
+                          if (key===yesterday) return 'Yesterday';
+                          return d.toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
+                        })(), tickets: [] };
+                        groups[key].tickets.push(tk);
+                      });
+                      return Object.values(groups);
+                    };
+                    const dateGroups = groupByDate(filtered);
+
                     return (
                       <div className="divide-y divide-slate-100">
-                        {filtered.map(tk=>{
+                        {dateGroups.map(group => (
+                          <div key={group.label}>
+                            <div className="flex items-center gap-3 px-4 py-2 bg-slate-50/80 sticky top-0 z-10">
+                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{group.label}</span>
+                              <div className="flex-1 h-px bg-slate-200"/>
+                              <span className="text-[10px] font-bold text-slate-400">{group.tickets.length} task{group.tickets.length!==1?'s':''}</span>
+                            </div>
+                            {group.tickets.map(tk=>{
                           const isDone = DONE.includes(tk.status);
                           const isOpen = openId===tk.id;
                           const mySess = sessions[tk.id];
@@ -1370,8 +1447,10 @@ const startTimer = async (id, needsAssign=false) => {
 
                              
                             </div>
-                               );
+                          );
                         })}
+                        </div>
+                      ))}
                       </div>
                     );
                   })()}

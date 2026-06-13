@@ -166,26 +166,28 @@ export default function BillingAuditPanel({ ticketId, isWarranty, isPrivileged }
                       {sg.expense_note && <span className="text-slate-500 italic font-normal">"{sg.expense_note}"</span>}
                     </span>
                   )}
-                  {/* All report files: primary + extras from ticket_worker_files */}
-                  {[...(sg.report_url?[{url:sg.report_url}]:[]),
-                    ...(workerFiles[w.worker_id]?.reports||[]).map(f=>({url:f.file_path}))
-                  ].map((f,i)=>(
+                  {/* All report files: use extraFiles if available, else fall back to report_url */}
+                  {(workerFiles[w.worker_id]?.reports?.length
+                    ? workerFiles[w.worker_id].reports.map(f=>({url:f.file_path, name:f.original_name}))
+                    : sg.report_url ? [{url:sg.report_url}] : []
+                  ).map((f,i)=>(
                     <a key={i} onClick={(e)=>{e.preventDefault();window.open(fullUrl(f.url),"_blank");}}
                        href={fullUrl(f.url)} target="_blank" rel="noopener noreferrer"
                        className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 font-bold text-[11px] bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full">
                       <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                      Report{i>0?` ${i+1}`:''}
+                      {i===0?'Report':`Report ${i+1}`}
                     </a>
                   ))}
-                  {/* All expense files: primary + extras */}
-                  {[...(sg.expense_file_url?[{url:sg.expense_file_url}]:[]),
-                    ...(workerFiles[w.worker_id]?.expenses||[]).map(f=>({url:f.file_path}))
-                  ].map((f,i)=>(
+                  {/* All expense files: use extraFiles if available, else fall back to expense_file_url */}
+                  {(workerFiles[w.worker_id]?.expenses?.length
+                    ? workerFiles[w.worker_id].expenses.map(f=>({url:f.file_path, name:f.original_name}))
+                    : sg.expense_file_url ? [{url:sg.expense_file_url}] : []
+                  ).map((f,i)=>(
                     <a key={i} onClick={(e)=>{e.preventDefault();window.open(fullUrl(f.url),"_blank");}}
                        href={fullUrl(f.url)} target="_blank" rel="noopener noreferrer"
                        className="inline-flex items-center gap-1 text-amber-600 hover:text-amber-700 font-bold text-[11px] bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
                       <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                      Expense{i>0?` ${i+1}`:' proof'}
+                      {i===0?'Expense proof':`Expense ${i+1}`}
                     </a>
                   ))}
                 </div>
@@ -194,27 +196,72 @@ export default function BillingAuditPanel({ ticketId, isWarranty, isPrivileged }
               {/* Body: either edit form or summary row */}
               {isEditing ? (
                 <div className="space-y-2">
-                  {/* Rate-card hint above the input */}
-                  {sg && sg.suggested_amount > 0 && (
-                    <div className="flex items-center gap-2 text-[11px] bg-blue-50 border border-blue-100 rounded-lg px-2.5 py-1.5">
-                      <svg className="w-3 h-3 text-blue-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-                      <span className="text-blue-700">Rate card suggests <span className="font-black">{inrFmt(sg.suggested_amount)}</span> <span className="text-blue-500">({sg.basis})</span></span>
-                      {sg.half_day_rate > 0 && (
-                        <span className="text-blue-500 text-[10px] ml-2">
-                          Half-day: <span className="font-black">₹{sg.half_day_rate.toLocaleString('en-IN')}</span>
-                          {' · '}Full-day: <span className="font-black">₹{sg.full_day_rate.toLocaleString('en-IN')}</span>
-                        </span>
+                  {/* Rate-card buttons */}
+                  {sg && !sg.is_warranty && (
+                    <div className="bg-blue-50 border border-blue-100 rounded-xl p-2.5 space-y-2">
+                      {/* Hours worked info */}
+                      <div className="flex items-center gap-1.5 text-[10px] text-blue-600 font-bold">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        {sg.hours_worked > 0
+                          ? `${sg.hours_worked.toFixed(1)}h worked · ${sg.basis}`
+                          : `No sessions recorded · ${sg.basis}`}
+                      </div>
+                      {/* Rate buttons — 3 tiers */}
+                      <div className="flex gap-2 flex-wrap">
+                        {/* Minimum visit charge — < 1 hour */}
+                        {sg.min_visit_charge > 0 && (
+                          <button type="button"
+                            onClick={() => setEditAmount(String(sg.min_visit_charge))}
+                            className={`flex-1 py-1.5 px-2 rounded-lg border text-[11px] font-bold transition-all ${
+                              editAmount === String(sg.min_visit_charge)
+                                ? 'bg-slate-700 text-white border-slate-700'
+                                : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                            }`}>
+                            🔔 Min. Visit<br/>
+                            <span className="text-base font-black">{inrFmt(sg.min_visit_charge)}</span>
+                            <span className="text-[9px] block opacity-70">less than 1h</span>
+                          </button>
+                        )}
+                        {/* Half-day — 1h to half_cutoff */}
+                        {sg.half_day_rate > 0 && (
+                          <button type="button"
+                            onClick={() => setEditAmount(String(sg.half_day_rate))}
+                            className={`flex-1 py-1.5 px-2 rounded-lg border text-[11px] font-bold transition-all ${
+                              editAmount === String(sg.half_day_rate)
+                                ? 'bg-amber-500 text-white border-amber-500'
+                                : 'bg-white text-amber-700 border-amber-200 hover:bg-amber-50'
+                            }`}>
+                            🌗 Half-day<br/>
+                            <span className="text-base font-black">{inrFmt(sg.half_day_rate)}</span>
+                            <span className="text-[9px] block opacity-70">1h – {sg.half_cutoff || 4.5}h</span>
+                          </button>
+                        )}
+                        {/* Full-day — more than half_cutoff */}
+                        {sg.full_day_rate > 0 && (
+                          <button type="button"
+                            onClick={() => setEditAmount(String(sg.full_day_rate))}
+                            className={`flex-1 py-1.5 px-2 rounded-lg border text-[11px] font-bold transition-all ${
+                              editAmount === String(sg.full_day_rate)
+                                ? 'bg-blue-600 text-white border-blue-600'
+                                : 'bg-white text-blue-700 border-blue-200 hover:bg-blue-50'
+                            }`}>
+                            ☀️ Full-day<br/>
+                            <span className="text-base font-black">{inrFmt(sg.full_day_rate)}</span>
+                            <span className="text-[9px] block opacity-70">more than {sg.half_cutoff || 4.5}h</span>
+                          </button>
+                        )}
+                      </div>
+                      {/* Auto-suggest based on actual hours */}
+                      {sg.suggested_amount > 0 && (
+                        <div className="flex items-center justify-between mt-1.5 px-1">
+                          <span className="text-[10px] text-slate-500">{sg.basis}</span>
+                          <button type="button"
+                            onClick={() => setEditAmount(String(sg.suggested_amount))}
+                            className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-lg hover:bg-emerald-100">
+                            Use suggested {inrFmt(sg.suggested_amount)} →
+                          </button>
+                        </div>
                       )}
-                      {sg.half_day_rate > 0 && (
-                        <span className="text-blue-500 text-[10px] ml-2">
-                          Half-day: <span className="font-black">₹{sg.half_day_rate.toLocaleString('en-IN')}</span>
-                          {' · '}Full-day: <span className="font-black">₹{sg.full_day_rate.toLocaleString('en-IN')}</span>
-                        </span>
-                      )}
-                      <button type="button" onClick={() => setEditAmount(String(sg.suggested_amount))}
-                        className="ml-auto text-[10px] font-bold px-2 py-0.5 rounded bg-blue-600 hover:bg-blue-700 text-white">
-                        Use this
-                      </button>
                     </div>
                   )}
 

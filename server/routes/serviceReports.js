@@ -64,25 +64,41 @@ router.get('/person-wise', svcAuth(['superadmin','admin']), svcPerm('view_report
   const fromDate = from || new Date(Date.now() - 30*24*60*60*1000).toISOString().slice(0,10);
   const toDate   = to   || new Date().toISOString().slice(0,10);
   try {
-    const { rows } = await pool.query(
-      `SELECT
-         su.id AS worker_id, su.name AS worker_name, su.role AS worker_role,
-         COUNT(DISTINCT ws.id)::int          AS session_count,
-         COUNT(DISTINCT ws.ticket_id)::int   AS ticket_count,
-         SUM(ws.total_seconds)::int          AS total_seconds,
-         AVG(ws.total_seconds)::int          AS avg_session_seconds,
-         COUNT(sp.id)::int                   AS total_pauses,
-         MIN(ws.started_at AT TIME ZONE 'Asia/Kolkata') AS earliest_start,
-         MAX(ws.ended_at   AT TIME ZONE 'Asia/Kolkata') AS latest_end
+    const { rows: allSessions } = await pool.query(
+      `SELECT ws.id, ws.worker_id, ws.total_seconds, ws.daily_seconds, ws.started_at, ws.ended_at,
+              su.id AS uid, su.name AS worker_name, su.role AS worker_role
        FROM service_users su
        LEFT JOIN work_sessions ws ON ws.worker_id=su.id
-         AND (ws.started_at AT TIME ZONE 'Asia/Kolkata')::date BETWEEN $1 AND $2
+         AND ws.status='completed'
        LEFT JOIN session_pauses sp ON sp.session_id=ws.id
-       WHERE su.role IN ('plc','wireman') AND su.is_active=TRUE
-       GROUP BY su.id, su.name, su.role
-       ORDER BY total_seconds DESC NULLS LAST`,
-      [fromDate, toDate]
+       WHERE su.role IN ('plc','wireman') AND su.is_active=TRUE`,
+      []
     );
+    // Build worker map using daily_seconds for accurate date filtering
+    const workerMap = {};
+    for (const s of allSessions) {
+      if (!workerMap[s.uid]) {
+        workerMap[s.uid] = { worker_id:s.uid, worker_name:s.worker_name, worker_role:s.worker_role, session_count:0, total_seconds:0 };
+      }
+      if (!s.id) continue; // no sessions
+      const daily = s.daily_seconds || {};
+      // Sum only seconds that fall within date range
+      let sessionSecsInRange = 0;
+      if (Object.keys(daily).length > 0) {
+        for (const [date, secs] of Object.entries(daily)) {
+          if (date >= fromDate && date <= toDate) sessionSecsInRange += secs;
+        }
+      } else {
+        // Fallback for old sessions without daily_seconds
+        const d = (s.started_at||'').slice(0,10);
+        if (d >= fromDate && d <= toDate) sessionSecsInRange = s.total_seconds || 0;
+      }
+      if (sessionSecsInRange > 0) {
+        workerMap[s.uid].session_count += 1;
+        workerMap[s.uid].total_seconds += sessionSecsInRange;
+      }
+    }
+    const rows = Object.values(workerMap).sort((a,b) => (b.total_seconds||0)-(a.total_seconds||0));
     res.json(rows);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -94,24 +110,71 @@ router.get('/person-detail/:workerId', svcAuth(['superadmin','admin']), svcPerm(
   const fromDate = from || new Date(Date.now() - 30*24*60*60*1000).toISOString().slice(0,10);
   const toDate   = to   || new Date().toISOString().slice(0,10);
   try {
-    const { rows } = await pool.query(
-      `SELECT
-         (ws.started_at AT TIME ZONE 'Asia/Kolkata')::date AS day,
-         SUM(ws.total_seconds)::int  AS total_seconds,
-         COUNT(ws.id)::int           AS sessions,
-         COUNT(DISTINCT ws.ticket_id)::int AS tickets,
-         EXTRACT(HOUR FROM MIN(ws.started_at AT TIME ZONE 'Asia/Kolkata'))::int AS first_hour,
-         EXTRACT(HOUR FROM MAX(COALESCE(ws.ended_at, NOW()) AT TIME ZONE 'Asia/Kolkata'))::int AS last_hour
-       FROM work_sessions ws
-       WHERE ws.worker_id=$1
-         AND (ws.started_at AT TIME ZONE 'Asia/Kolkata')::date BETWEEN $2 AND $3
-       GROUP BY day ORDER BY day ASC`,
-      [req.params.workerId, fromDate, toDate]
+    // Use daily_seconds for accurate day-wise breakdown
+    const { rows: sessions } = await pool.query(
+      `SELECT id, daily_seconds, total_seconds, started_at, ended_at
+       FROM work_sessions
+       WHERE worker_id=$1 AND status='completed'`,
+      [req.params.workerId]
     );
+    // Aggregate by date using daily_seconds
+    const dayMap = {};
+    for (const s of sessions) {
+      const daily = s.daily_seconds || {};
+      if (Object.keys(daily).length > 0) {
+        for (const [date, secs] of Object.entries(daily)) {
+          if (date >= fromDate && date <= toDate) {
+            if (!dayMap[date]) dayMap[date] = { day: date, total_seconds: 0, sessions: 0 };
+            dayMap[date].total_seconds += secs;
+            dayMap[date].sessions += 1;
+          }
+        }
+      } else {
+        // Fallback for old sessions
+        const d = (s.started_at||'').slice(0,10);
+        if (d >= fromDate && d <= toDate) {
+          if (!dayMap[d]) dayMap[d] = { day: d, total_seconds: 0, sessions: 0 };
+          dayMap[d].total_seconds += s.total_seconds || 0;
+          dayMap[d].sessions += 1;
+        }
+      }
+    }
+    const rows = Object.values(dayMap).sort((a,b) => a.day.localeCompare(b.day));
     res.json(rows);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+
+// ── GET /api/service/reports/person-tickets/:workerId ────────────────────
+// Ticket-wise breakdown for one worker
+router.get('/person-tickets/:workerId', svcAuth(['superadmin','admin']), svcPerm('view_reports'), async (req, res) => {
+  const { from, to } = req.query;
+  const fromDate = from || new Date(Date.now() - 30*24*60*60*1000).toISOString().slice(0,10);
+  const toDate   = to   || new Date().toISOString().slice(0,10);
+  try {
+    const { rows } = await pool.query(
+      `SELECT
+         t.ticket_id AS ticket_no,
+         t.customer_name,
+         t.job_no,
+         COUNT(DISTINCT ws.id)::int          AS sessions,
+         SUM(ws.total_seconds)::int          AS total_seconds,
+         MIN(ws.started_at AT TIME ZONE 'Asia/Kolkata') AS first_session
+       FROM work_sessions ws
+       JOIN service_tickets t ON t.id = ws.ticket_id
+       WHERE ws.worker_id = $1
+         AND (ws.started_at AT TIME ZONE 'Asia/Kolkata')::date BETWEEN $2 AND $3
+         AND ws.total_seconds > 0
+       GROUP BY t.id, t.ticket_id, t.customer_name, t.job_no
+       ORDER BY first_session DESC`,
+      [req.params.workerId, fromDate, toDate]
+    );
+    res.json(rows.map(r => ({
+      ...r,
+      hours: +((r.total_seconds || 0) / 3600).toFixed(2),
+    })));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 /* ─── GET /api/service/reports/pause-analytics ─── */
 router.get('/pause-analytics', svcAuth(['superadmin','admin']), svcPerm('view_reports'), async (req, res) => {
   const { from, to } = req.query;

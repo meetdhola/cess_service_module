@@ -115,7 +115,8 @@ async function loadSessionsWithCosts(fromDate, toDate) {
       s,
       pricingRows
     );
-    const standardRevenue = computeRevenue(s, pricing, hours);
+    const dailyHours   = Number(s.daily_hours) || 9;
+    const standardRevenue = computeRevenue(s, pricing, hours, dailyHours);
 
     const isWarranty = s.warranty_status === 'in_warranty';
 
@@ -272,7 +273,8 @@ router.get('/profitability/user-wise', svcAuth(['superadmin','admin']), svcPerm(
         monthly_salary: Number(s.monthly_salary||0), irc_daily_rate: Number(s.irc_daily_rate||0),
         sessions: 0, hours: 0,
         actual_cost: 0, irc_cost: 0, revenue: 0,
-        timeline: {}, // {bucket: {revenue, actual_cost, irc_cost}}
+        timeline: {},         // {bucket: {revenue, actual_cost, irc_cost}}
+        ticket_breakdown: {}, // {ticket_id: {ticket_no, customer_name, job_no, sessions, hours, ...}}
       };
       const u = byUserMap[k];
       u.sessions    += 1;
@@ -287,6 +289,24 @@ router.get('/profitability/user-wise', svcAuth(['superadmin','admin']), svcPerm(
       u.timeline[bk].actual_cost += s.actual_cost;
       u.timeline[bk].irc_cost    += s.irc_cost;
       u.timeline[bk].sessions    += 1;
+      // ticket_breakdown aggregation
+      const tk = s.ticket_id;
+      if (!u.ticket_breakdown[tk]) u.ticket_breakdown[tk] = {
+        ticket_id:     s.ticket_id,
+        ticket_no:     s.ticket_no,
+        customer_name: s.customer_name,
+        job_no:        s.job_no || '—',
+        sessions:      0,
+        hours:         0,
+        actual_cost:   0,
+        irc_cost:      0,
+        revenue:       0,
+      };
+      u.ticket_breakdown[tk].sessions    += 1;
+      u.ticket_breakdown[tk].hours       += s.hours;
+      u.ticket_breakdown[tk].actual_cost += s.actual_cost;
+      u.ticket_breakdown[tk].irc_cost    += s.irc_cost;
+      u.ticket_breakdown[tk].revenue     += s.revenue;
     }
 
     const users = Object.values(byUserMap).map(u => ({
@@ -307,6 +327,15 @@ router.get('/profitability/user-wise', svcAuth(['superadmin','admin']), svcPerm(
         actual_profit: +(t.revenue - t.actual_cost).toFixed(2),
         irc_profit: +(t.revenue - t.irc_cost).toFixed(2),
       })).sort((a,b) => a.bucket.localeCompare(b.bucket)),
+      ticket_breakdown: Object.values(u.ticket_breakdown).map(t => ({
+        ...t,
+        hours:         +t.hours.toFixed(2),
+        actual_cost:   +t.actual_cost.toFixed(2),
+        irc_cost:      +t.irc_cost.toFixed(2),
+        revenue:       +t.revenue.toFixed(2),
+        actual_profit: +(t.revenue - t.actual_cost).toFixed(2),
+        irc_profit:    +(t.revenue - t.irc_cost).toFixed(2),
+      })).sort((a,b) => a.ticket_no.localeCompare(b.ticket_no)),
     })).sort((a,b) => b.irc_profit - a.irc_profit);
 
     res.json({ granularity, users });

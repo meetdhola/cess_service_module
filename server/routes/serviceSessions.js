@@ -1,4 +1,14 @@
 const router  = require('express').Router();
+
+// Helper: add seconds to a date key in daily_seconds JSONB
+function addDailySeconds(existing, dateKey, seconds) {
+  const obj = existing || {};
+  obj[dateKey] = (obj[dateKey] || 0) + Math.round(seconds);
+  return obj;
+}
+function todayKey() {
+  return new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' }); // YYYY-MM-DD
+}
 const pool    = require('../db/pool');
 const svcAuth = require('../middleware/serviceAuth');
 const svcPerm = require('../middleware/servicePermission');
@@ -15,7 +25,7 @@ router.post('/start', svcAuth(['plc','wireman','admin','superadmin']), svcPerm('
     );
     if (active.length) return res.status(409).json({ error: 'Session already active.' });
     const { rows } = await pool.query(
-      `INSERT INTO work_sessions (ticket_id, worker_id, started_at, status) VALUES ($1,$2,NOW(),'running') RETURNING *`,
+      `INSERT INTO work_sessions (ticket_id, worker_id, started_at, status, daily_seconds) VALUES ($1,$2,NOW(),'running','{}') RETURNING *`,
       [ticket_id, workerId]
     );
     await pool.query(`UPDATE service_tickets SET status='In Progress', updated_at=NOW() WHERE id=$1`, [ticket_id]);
@@ -38,7 +48,10 @@ router.post('/:id/pause', svcAuth(['plc','wireman','admin','superadmin']), svcPe
     if (!sess.length) return res.status(404).json({ error: 'Not found' });
     if (sess[0].status !== 'running') return res.status(400).json({ error: 'Not running' });
     const elapsed = Math.floor((Date.now() - new Date(sess[0].started_at).getTime()) / 1000);
-    await client.query(`UPDATE work_sessions SET status='paused', total_seconds=total_seconds+$1 WHERE id=$2`, [elapsed, req.params.id]);
+    const pauseDate = todayKey();
+    const existingDaily = sess[0].daily_seconds || {};
+    const updatedDaily = addDailySeconds(existingDaily, pauseDate, elapsed);
+    await client.query(`UPDATE work_sessions SET status='paused', total_seconds=total_seconds+$1, daily_seconds=$3::jsonb WHERE id=$2`, [elapsed, req.params.id, JSON.stringify(updatedDaily)]);
     const { rows: pause } = await client.query(`INSERT INTO session_pauses (session_id,paused_at,reason) VALUES ($1,NOW(),$2) RETURNING *`, [req.params.id, reason.trim()]);
     await client.query('COMMIT');
     req.io?.to('admins').emit('session:paused', { sessionId: req.params.id, reason: reason.trim(), worker: req.svcUser.name });
@@ -74,7 +87,10 @@ router.post('/:id/stop', svcAuth(['plc','wireman','admin','superadmin']), svcPer
     if (!sess.length) return res.status(404).json({ error: 'Not found' });
     let elapsed = 0;
     if (sess[0].status === 'running') elapsed = Math.floor((Date.now() - new Date(sess[0].started_at).getTime()) / 1000);
-    const { rows } = await client.query(`UPDATE work_sessions SET status='completed', ended_at=NOW(), total_seconds=total_seconds+$1 WHERE id=$2 RETURNING *`, [elapsed, req.params.id]);
+    const stopDate = todayKey();
+    const existingDailyStop = sess[0].daily_seconds || {};
+    const updatedDailyStop = elapsed > 0 ? addDailySeconds(existingDailyStop, stopDate, elapsed) : existingDailyStop;
+    const { rows } = await client.query(`UPDATE work_sessions SET status='completed', ended_at=NOW(), total_seconds=total_seconds+$1, daily_seconds=$3::jsonb WHERE id=$2 RETURNING *`, [elapsed, req.params.id, JSON.stringify(updatedDailyStop)]);
     await client.query('COMMIT');
     req.io?.to('admins').emit('session:completed', {
       sessionId: req.params.id, worker: req.svcUser.name,
@@ -115,6 +131,27 @@ router.get('/active', svcAuth(['plc','wireman','admin','superadmin']), async (re
       [req.svcUser.id]
     );
     res.json(rows);   // ← array now, not a single object
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+
+/* GET /all — all sessions for admin/superadmin sessions tab */
+router.get('/all', svcAuth(['superadmin','admin']), svcPerm('view_sessions'), async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT ws.*,
+              su.name        AS worker_name,
+              su.role        AS worker_role,
+              su.department  AS worker_dept,
+              st.ticket_id   AS ticket_no,
+              st.customer_name,
+              st.service_type
+         FROM work_sessions ws
+         JOIN service_users su ON su.id = ws.worker_id
+         JOIN service_tickets st ON st.id = ws.ticket_id
+        ORDER BY ws.started_at DESC
+        LIMIT 500`);
+    res.json(rows);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

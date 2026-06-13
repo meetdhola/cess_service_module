@@ -53,8 +53,8 @@ router.post('/', async (req, res) => {
         (ticket_id, service_type, customer_name, address, description, priority,
          contact_name, contact_phone, designation, sales_agent,
          needs_plc, needs_wiring, plc_type,
-         warranty_status, invoice_no, invoice_date, challan_no, challan_date, deadline_date, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6, $7,$8,$9,$10, $11,$12,$13, $14,$15,$16,$17,$18,$19,$20)
+         warranty_status, invoice_no, invoice_date, challan_no, challan_date, deadline_date, created_by, job_no)
+       VALUES ($1,$2,$3,$4,$5,$6, $7,$8,$9,$10, $11,$12,$13, $14,$15,$16,$17,$18,$19,$20,$21)
        RETURNING *`,
       [ticket_id, b.service_type, b.customer_name.trim(), b.address.trim(), b.description||null, b.priority||'Medium',
        b.contact_name||null, b.contact_phone||null, b.designation||null, b.sales_agent||null,
@@ -62,7 +62,7 @@ router.post('/', async (req, res) => {
        b.warranty_status||'in_warranty',
        b.invoice_no||null, b.invoice_no?new Date():null,
        b.challan_no||null, b.challan_no?new Date():null,
-       b.deadline_date||null, creatorId]
+       b.deadline_date||null, creatorId, b.job_no||null]
     );
     await client.query('COMMIT');
     res.status(201).json(rows[0]);
@@ -88,11 +88,14 @@ router.post('/:id/media', upload.array('files', 10), async (req, res) => {
 
 /* ─── GET /api/service/tickets — list (admin) ─── */
 router.get('/', svcAuth(['admin','superadmin']), svcPerm('view_all_tickets'), async (req, res) => {
-  const { status, priority, service_type, search } = req.query;
+  const { status, priority, service_type, search, sales_agent, date_from, date_to } = req.query;
   const where = []; const args = []; let n = 1;
   if (status      && status      !== 'All') { where.push(`t.status=$${n++}`);       args.push(status); }
   if (priority    && priority    !== 'All') { where.push(`t.priority=$${n++}`);     args.push(priority); }
   if (service_type&& service_type!== 'All') { where.push(`t.service_type=$${n++}`); args.push(service_type); }
+  if (sales_agent && sales_agent !== 'All') { where.push(`t.sales_agent=$${n++}`);  args.push(sales_agent); }
+  if (date_from) { where.push(`(t.created_at AT TIME ZONE 'Asia/Kolkata')::date >= $${n++}`); args.push(date_from); }
+  if (date_to)   { where.push(`(t.created_at AT TIME ZONE 'Asia/Kolkata')::date <= $${n++}`); args.push(date_to); }
   if (search) { where.push(`(t.ticket_id ILIKE $${n} OR t.customer_name ILIKE $${n} OR t.contact_name ILIKE $${n})`); args.push(`%${search}%`); n++; }
   const sql = `
     SELECT t.*,
@@ -741,6 +744,10 @@ router.get('/:id/billing-status', svcAuth(), async (req, res) => {
         WHERE twb.ticket_id = $1`,
       [req.params.id]);
     const bMap = Object.fromEntries(billings.map(b => [b.worker_id, b]));
+    // Get extra files from ticket_worker_files
+    const { rows: extraFiles } = await pool.query(
+      `SELECT * FROM ticket_worker_files WHERE ticket_id=$1 ORDER BY uploaded_at ASC`,
+      [req.params.id]);
 
     // Get ticket warranty status
     const { rows: tkts } = await pool.query(
@@ -777,8 +784,16 @@ router.get('/:id/billing-status', svcAuth(), async (req, res) => {
                               ? b.expense_file_path
                               : `/uploads/${b.expense_file_path}`)
                             : null,
-        all_report_files:  b?.completion_report_path ? [{ url: b.completion_report_path.startsWith('/uploads') ? b.completion_report_path : `/uploads/${b.completion_report_path}`, name: 'Report' }] : [],
-        all_expense_files: b?.expense_file_path ? [{ url: b.expense_file_path.startsWith('/uploads') ? b.expense_file_path : `/uploads/${b.expense_file_path}`, name: 'Expense proof' }] : [],
+        all_report_files: (() => {
+          const extras = (extraFiles||[]).filter(f=>f.worker_id===a.worker_id&&f.file_type==='report').map(f=>({ url:f.file_path.startsWith('/uploads')?f.file_path:`/uploads/${f.file_path}`, name:f.original_name||'Report' }));
+          if (extras.length>0) return extras;
+          return b?.completion_report_path ? [{ url:b.completion_report_path.startsWith('/uploads')?b.completion_report_path:`/uploads/${b.completion_report_path}`, name:'Report' }] : [];
+        })(),
+        all_expense_files: (() => {
+          const extras = (extraFiles||[]).filter(f=>f.worker_id===a.worker_id&&f.file_type==='expense').map(f=>({ url:f.file_path.startsWith('/uploads')?f.file_path:`/uploads/${f.file_path}`, name:f.original_name||'Expense proof', amount:f.expense_amount }));
+          if (extras.length>0) return extras;
+          return b?.expense_file_path ? [{ url:b.expense_file_path.startsWith('/uploads')?b.expense_file_path:`/uploads/${b.expense_file_path}`, name:'Expense proof' }] : [];
+        })(),
       };
     });
 
@@ -877,7 +892,8 @@ router.get('/:id/rate-suggestion', svcAuth(['admin','superadmin']), svcPerm('vie
            FROM ticket_assignments WHERE ticket_id=$1 GROUP BY worker_id
        )
        SELECT su.id AS worker_id, su.name AS worker_name, su.role AS worker_role,
-              su.seniority AS worker_seniority, a.assigned_role,
+              su.seniority AS worker_seniority, su.daily_hours AS daily_hours,
+              a.assigned_role,
               COALESCE((
                 SELECT SUM(CASE WHEN ws.status='running'
                   THEN ws.total_seconds + EXTRACT(EPOCH FROM (NOW()-ws.started_at))::int
@@ -906,7 +922,7 @@ router.get('/:id/rate-suggestion', svcAuth(['admin','superadmin']), svcPerm('vie
       return row || null;
     }
 
-    function computeRevenue(ticket, pricing, hours) {
+    function computeRevenue(ticket, pricing, hours, dailyHours) {
       if (ticket.override_rate) return Number(ticket.override_rate);
       if (!pricing) return 0;
       if (ticket.billing_mode === 'grade_rate') {
@@ -914,30 +930,43 @@ router.get('/:id/rate-suggestion', svcAuth(['admin','superadmin']), svcPerm('vie
         return Number(pricing['grade_' + grade + '_rate'] || 0);
       }
       if (ticket.billing_mode === 'half_day') return Number(pricing.half_day_rate || 0);
-      if (hours > 0 && hours <= 4) return Number(pricing.half_day_rate || pricing.per_day_rate * 0.6 || 0);
+      const minCharge  = Number(pricing.minimum_visit_charge || 1500);
+      const halfCutoff = (dailyHours || 9) / 2; // e.g. 9h day → 4.5h half
+      if (hours === 0)              return 0;
+      if (hours < 1)                return minCharge;
+      if (hours <= halfCutoff)      return Number(pricing.half_day_rate || 0);
       return Number(pricing.per_day_rate || 0);
     }
 
     const toUrl = (p) => !p ? null : p.startsWith('/uploads') ? p : '/uploads/' + p;
 
     const result = workers.map(w => {
-      const hours   = (Number(w.total_seconds) || 0) / 3600;
+      const hours      = (Number(w.total_seconds) || 0) / 3600;
+      const dailyHours = Number(w.daily_hours) || 9;
+      const halfCutoff = dailyHours / 2;
       const pricing = pickPricing(
         { role: w.assigned_role || w.worker_role, seniority: w.worker_seniority },
         ticket, pricingRows);
-      const suggested = isWarranty ? 0 : computeRevenue(ticket, pricing, hours);
+      const minCharge = Number(pricing?.minimum_visit_charge || 1500);
+      // Auto-suggest based on tier logic
+      const suggested = isWarranty ? 0 : computeRevenue(ticket, pricing, hours, dailyHours);
 
       let basis;
-      if (isWarranty)                                    basis = 'Warranty — no charge';
-      else if (ticket.override_rate)                     basis = 'Override rate';
-      else if (ticket.billing_mode === 'half_day')       basis = 'Half-day rate';
-      else if (ticket.billing_mode === 'grade_rate')     basis = 'Grade ' + String(ticket.customer_grade||'B').toUpperCase() + ' rate';
-      else if (hours > 0 && hours <= 4)                  basis = 'Auto half-day (≤4h)';
-      else                                               basis = 'Per-day rate';
+      if (isWarranty)                           basis = 'Warranty — no charge';
+      else if (ticket.override_rate)            basis = 'Override rate';
+      else if (ticket.billing_mode==='half_day') basis = 'Half-day rate';
+      else if (ticket.billing_mode==='grade_rate') basis = 'Grade ' + String(ticket.customer_grade||'B').toUpperCase() + ' rate';
+      else if (hours === 0)                     basis = 'No sessions yet';
+      else if (hours < 1)                       basis = `${Math.round(hours*60)}min → minimum visit charge`;
+      else if (hours <= halfCutoff)             basis = `${hours.toFixed(1)}h → half-day (≤${halfCutoff}h)`;
+      else                                      basis = `${hours.toFixed(1)}h → full-day (>${halfCutoff}h)`;
 
       // Half + full day rates for display
       const halfDayAmount = isWarranty ? 0 : (pricing ? Math.round(Number(pricing.half_day_rate || 0)) : 0);
       const fullDayAmount = isWarranty ? 0 : (pricing ? Math.round(Number(pricing.per_day_rate  || 0)) : 0);
+      // Time-based: proportional charge = (hours / 9) * per_day_rate
+      const timeBasedAmount = isWarranty || !pricing || hours === 0 ? 0
+        : Math.round((hours / dailyHours) * Number(pricing.per_day_rate || 0));
 
       return {
         worker_id:        w.worker_id,
@@ -950,6 +979,10 @@ router.get('/:id/rate-suggestion', svcAuth(['admin','superadmin']), svcPerm('vie
         basis,
         half_day_rate:    halfDayAmount,
         full_day_rate:    fullDayAmount,
+        min_visit_charge: isWarranty ? 0 : minCharge,
+        hours_worked:     +hours.toFixed(2),
+        half_cutoff:      halfCutoff,
+        is_warranty:      isWarranty,
         charged_amount:   w.charged_amount != null ? Number(w.charged_amount) : null,
         charged_note:     w.charged_note || null,
         expense_amount:   w.expense_amount != null ? Number(w.expense_amount) : 0,
@@ -987,7 +1020,7 @@ router.delete('/:id', svcAuth(['superadmin']), svcPerm('delete_ticket'), async (
 router.patch('/:id/edit', svcAuth(['admin','superadmin']), svcPerm('assign_workers'), async (req, res) => {
   const { customer_name, address, service_type, description, priority,
           contact_name, contact_phone, designation, sales_agent,
-          warranty_status, needs_plc, needs_wiring, plc_type, deadline_date } = req.body;
+          warranty_status, needs_plc, needs_wiring, plc_type, deadline_date, job_no } = req.body;
   try {
     const { rows } = await pool.query(
       `UPDATE service_tickets SET
@@ -1005,15 +1038,16 @@ router.patch('/:id/edit', svcAuth(['admin','superadmin']), svcPerm('assign_worke
         needs_wiring   = COALESCE($12, needs_wiring),
         plc_type       = COALESCE($13, plc_type),
         deadline_date  = COALESCE($14, deadline_date),
+        job_no         = COALESCE($15, job_no),
         updated_at     = NOW()
-       WHERE id=$15::uuid
+       WHERE id=$16::uuid
        RETURNING *`,
       [customer_name||null, address||null, service_type||null, description||null, priority||null,
        contact_name||null, contact_phone||null, designation||null, sales_agent||null,
        warranty_status||null,
        needs_plc!=null ? !!needs_plc : null,
        needs_wiring!=null ? !!needs_wiring : null,
-       plc_type||null, deadline_date||null,
+       plc_type||null, deadline_date||null, job_no||null,
        req.params.id]);
     if (!rows.length) return res.status(404).json({ error: 'Ticket not found' });
     res.json(rows[0]);

@@ -7,7 +7,11 @@ export function getSocket() {
   const token = localStorage.getItem('svc_token');
   if (!token) return null;
   if (!_socket || _socket.disconnected) {
-    _socket = io('/', {
+    // In dev (port 3000), Socket.IO is on the Express backend (port 5001)
+    const socketUrl = window.location.port === '3000'
+      ? `${window.location.protocol}//${window.location.hostname}:5001`
+      : '/';
+    _socket = io(socketUrl, {
       auth: { token },
       transports: ['websocket','polling'],
       autoConnect: true,

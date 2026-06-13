@@ -14,7 +14,7 @@ const AGENTS = ['Divy Shah','Chirag Shah','Ketan Tundiya','Chetankumar Shah','Pa
 
 const INIT = {
   customer_name:'', address:'', service_type:'', description:'',
-  contact_name:'', contact_phone:'', designation:'', sales_agent:'', deadline_date:'',
+  contact_name:'', contact_phone:'', designation:'', sales_agent:'', deadline_date:'', job_no:'',
   priority:'Medium', needs_plc:false, needs_wiring:false, plc_type:'',
   warranty_status:'in_warranty',
   invoice_no:'', challan_no:''
@@ -733,6 +733,9 @@ export default function InquiryForm() {
               <div><FLabel>Customer Ask Date / Deadline</FLabel>
                 <FInput type="date" value={form.deadline_date} onChange={e=>set('deadline_date',e.target.value)}/>
               </div>
+              <div><FLabel>Ref No <span className="text-slate-400 font-normal">(optional)</span></FLabel>
+                <FInput placeholder="e.g. REF/2026/001" value={form.job_no} onChange={e=>set('job_no',e.target.value)}/>
+              </div>
             </div>
 
             {/* Warranty Status */}
@@ -834,6 +837,7 @@ export default function InquiryForm() {
                   ...(!isInstallation(form.service_type)
                     ? [['Warranty', form.warranty_status==='in_warranty'?'✓ In Warranty':'⚠ Out of Warranty']]
                     : []),
+                  ['Ref No',   form.job_no||'—'],
                   ['Invoice',  form.invoice_no||'—'],
                   ['Challan',  form.challan_no||'—'],
                   ['Files',    `${files.length} attached`],

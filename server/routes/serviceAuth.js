@@ -22,7 +22,7 @@ router.post('/login', async (req, res) => {
     if (user.secret_key !== secretKey.trim()) return res.status(401).json({ error: 'Invalid secret key' });
     const token = jwt.sign(
       { id: user.id, name: user.name, phone: user.phone, role: user.role, dept: user.department },
-      SECRET, { expiresIn: '12h' }
+      SECRET, { expiresIn: '7d' }
     );
     res.json({ token, user: { id: user.id, name: user.name, phone: user.phone, role: user.role, department: user.department } });
   } catch (e) { res.status(500).json({ error: e.message }); }

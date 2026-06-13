@@ -88,7 +88,7 @@ router.get('/person-wise', svcAuth(['superadmin','admin']), svcPerm('view_report
           if (date >= fromDate && date <= toDate) sessionSecsInRange += secs;
         }
       } else {
-        const d = (s.started_at||'').slice(0,10);
+        const d = s.started_at ? new Date(s.started_at).toISOString().slice(0,10) : '';
         if (d >= fromDate && d <= toDate) sessionSecsInRange = s.total_seconds || 0;
       }
       if (sessionSecsInRange > 0) {
@@ -129,7 +129,7 @@ router.get('/person-detail/:workerId', svcAuth(['superadmin','admin']), svcPerm(
         }
       } else {
         // Fallback for old sessions
-        const d = (s.started_at||'').slice(0,10);
+        const d = s.started_at ? new Date(s.started_at).toISOString().slice(0,10) : '';
         if (d >= fromDate && d <= toDate) {
           if (!dayMap[d]) dayMap[d] = { day: d, total_seconds: 0, sessions: 0 };
           dayMap[d].total_seconds += s.total_seconds || 0;

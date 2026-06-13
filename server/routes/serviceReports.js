@@ -64,38 +64,36 @@ router.get('/person-wise', svcAuth(['superadmin','admin']), svcPerm('view_report
   const fromDate = from || new Date(Date.now() - 30*24*60*60*1000).toISOString().slice(0,10);
   const toDate   = to   || new Date().toISOString().slice(0,10);
   try {
-    const { rows: allSessions } = await pool.query(
-      `SELECT ws.id, ws.worker_id, ws.total_seconds, ws.daily_seconds, ws.started_at, ws.ended_at,
-              su.id AS uid, su.name AS worker_name, su.role AS worker_role
+    const { rows: allWorkers } = await pool.query(
+      `SELECT su.id AS uid, su.name AS worker_name, su.role AS worker_role
        FROM service_users su
-       LEFT JOIN work_sessions ws ON ws.worker_id=su.id
-         AND ws.status='completed'
-       LEFT JOIN session_pauses sp ON sp.session_id=ws.id
-       WHERE su.role IN ('plc','wireman') AND su.is_active=TRUE`,
-      []
+       WHERE su.role IN ('plc','wireman') AND su.is_active=TRUE`
+    );
+    const { rows: allSessions } = await pool.query(
+      `SELECT ws.id, ws.worker_id, ws.total_seconds, ws.daily_seconds, ws.started_at
+       FROM work_sessions ws
+       WHERE ws.status='completed'`
     );
     // Build worker map using daily_seconds for accurate date filtering
     const workerMap = {};
+    for (const w of allWorkers) {
+      workerMap[w.uid] = { worker_id:w.uid, worker_name:w.worker_name, worker_role:w.worker_role, session_count:0, total_seconds:0 };
+    }
     for (const s of allSessions) {
-      if (!workerMap[s.uid]) {
-        workerMap[s.uid] = { worker_id:s.uid, worker_name:s.worker_name, worker_role:s.worker_role, session_count:0, total_seconds:0 };
-      }
-      if (!s.id) continue; // no sessions
+      if (!workerMap[s.worker_id]) continue;
       const daily = s.daily_seconds || {};
-      // Sum only seconds that fall within date range
       let sessionSecsInRange = 0;
       if (Object.keys(daily).length > 0) {
         for (const [date, secs] of Object.entries(daily)) {
           if (date >= fromDate && date <= toDate) sessionSecsInRange += secs;
         }
       } else {
-        // Fallback for old sessions without daily_seconds
         const d = (s.started_at||'').slice(0,10);
         if (d >= fromDate && d <= toDate) sessionSecsInRange = s.total_seconds || 0;
       }
       if (sessionSecsInRange > 0) {
-        workerMap[s.uid].session_count += 1;
-        workerMap[s.uid].total_seconds += sessionSecsInRange;
+        workerMap[s.worker_id].session_count += 1;
+        workerMap[s.worker_id].total_seconds += sessionSecsInRange;
       }
     }
     const rows = Object.values(workerMap).sort((a,b) => (b.total_seconds||0)-(a.total_seconds||0));

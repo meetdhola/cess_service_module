@@ -38,9 +38,13 @@ async function toBase64(url) {
     const backendOrigin = window.location.port === '3000'
       ? `${window.location.protocol}//${window.location.hostname}:5001`
       : window.location.origin;
-    const fetchUrl = url.includes('localhost:3000')
-      ? url.replace('localhost:3000', `${window.location.hostname}:5001`)
-      : url.startsWith('/') ? `${backendOrigin}${url}` : url;
+    // Fix any localhost references to use correct origin
+    let fetchUrl = url;
+    if (url.includes('localhost:3000') || url.includes('localhost:5001')) {
+      fetchUrl = url.replace(/https?:\/\/localhost:\d+/, backendOrigin);
+    } else if (url.startsWith('/')) {
+      fetchUrl = `${backendOrigin}${url}`;
+    }
     const res = await fetch(fetchUrl, { headers: { Authorization: `Bearer ${localStorage.getItem('svc_token')}` } });
     if (!res.ok) return null;
     const blob = await res.blob();

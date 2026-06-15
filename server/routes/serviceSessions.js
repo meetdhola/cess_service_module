@@ -15,8 +15,10 @@ const svcPerm = require('../middleware/servicePermission');
 
 // ── POST /api/service/sessions/start ─────────────────────────────────────
 router.post('/start', svcAuth(['plc','wireman','admin','superadmin']), svcPerm('start_timer'), async (req, res) => {
-  const { ticket_id } = req.body;
+  const { ticket_id, plc_type } = req.body;
   if (!ticket_id) return res.status(400).json({ error: 'ticket_id required' });
+  if (!plc_type || !['onsite','remote'].includes(plc_type))
+    return res.status(400).json({ error: 'plc_type required: onsite or remote' });
   const workerId = req.svcUser.id;
   try {
     const { rows: active } = await pool.query(
@@ -25,8 +27,9 @@ router.post('/start', svcAuth(['plc','wireman','admin','superadmin']), svcPerm('
     );
     if (active.length) return res.status(409).json({ error: 'Session already active.' });
     const { rows } = await pool.query(
-      `INSERT INTO work_sessions (ticket_id, worker_id, started_at, status, daily_seconds) VALUES ($1,$2,NOW(),'running','{}') RETURNING *`,
-      [ticket_id, workerId]
+      `INSERT INTO work_sessions (ticket_id, worker_id, started_at, status, daily_seconds, session_plc_type)
+       VALUES ($1,$2,NOW(),'running','{}',$3) RETURNING *`,
+      [ticket_id, workerId, plc_type]
     );
     await pool.query(`UPDATE service_tickets SET status='In Progress', updated_at=NOW() WHERE id=$1`, [ticket_id]);
     // Emit real-time event

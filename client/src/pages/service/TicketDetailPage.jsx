@@ -66,9 +66,28 @@ function WorkerActions({ ticket, billing, onAnyChange }) {
   const [elapsed, setElapsed] = useState(0);
   const [pauseOpen, setPauseOpen] = useState(false);
   const [reason, setReason]   = useState('');
-  const [reasonCat, setReasonCat] = useState('other');
+  const [reasonCat, setReasonCat] = useState('');
   const [completionOpen, setCompletionOpen] = useState(false);
   const [busy, setBusy]       = useState(false);
+  const [plcModalOpen, setPlcModalOpen] = useState(false);
+
+  const start = () => {
+    // Only PLC workers need to select work type
+    if (svcUser?.role === 'plc') {
+      setPlcModalOpen(true);
+    } else {
+      confirmStart('onsite');
+    }
+  };
+
+  const confirmStart = async (plcType) => {
+    setPlcModalOpen(false);
+    setBusy(true);
+    try { await svcApi.post('/sessions/start', { ticket_id: ticket.id, plc_type: plcType }); await loadActive(); onAnyChange?.(); }
+    catch (e) { alert(e.response?.data?.error || 'Failed'); }
+    finally { setBusy(false); }
+  };
+
   const ticker = useRef(null);
 
   // Worker considers their work finished once status moves to Report Submitted or beyond
@@ -103,18 +122,19 @@ function WorkerActions({ ticket, billing, onAnyChange }) {
     return () => clearInterval(ticker.current);
   }, [sess?.status]);
 
-  const start = async () => {
-    setBusy(true);
-    try { await svcApi.post('/sessions/start', { ticket_id: ticket.id }); await loadActive(); onAnyChange?.(); }
-    catch (e) { alert(e.response?.data?.error || 'Failed'); }
-    finally { setBusy(false); }
-  };
   const pause = async () => {
-    if (!reason.trim()) { alert('Please enter a reason'); return; }
+    if (!reasonCat) { alert('Please select a reason category'); return; }
+    if (reasonCat === 'other' && !reason.trim()) { alert('Please describe the reason for pausing'); return; }
+    // For non-other categories, use the label as the reason if textarea is empty
+    if (!reason.trim()) { 
+      const CATS = [['Lunch Break','lunch_break'],['Tea Break','tea_break'],['Material Unavailable','material_unavailable'],['Waiting for Instructions','waiting_instructions'],['Site Issue','site_issue'],['Other','other']];
+      const found = CATS.find(([,c]) => c === reasonCat);
+      if (found) setReason(found[0]);
+    }
     setBusy(true);
     try {
       await svcApi.post(`/sessions/${sess.id}/pause`, { reason, reason_category: reasonCat });
-      setPauseOpen(false); setReason(''); setReasonCat('other');
+      setPauseOpen(false); setReason(''); setReasonCat('');
       await loadActive();
     } catch (e) { alert(e.response?.data );
       // console.log(e.response?.data )
@@ -227,18 +247,18 @@ function WorkerActions({ ticket, billing, onAnyChange }) {
                 <div className="px-6 py-5 overflow-y-auto">
                   <div className="flex flex-wrap gap-2 mb-4">
                     {PAUSE_REASONS.map(([label, cat]) => (
-                      <button key={label} onClick={()=>{setReason(label); setReasonCat(cat);}}
+                      <button key={label} onClick={()=>{ setReasonCat(cat); setReason(cat==='other' ? '' : label); }}
                         className={`px-3 py-1.5 rounded-full text-xs font-bold border ${reason===label?'bg-slate-900 text-white border-slate-900':'bg-white text-slate-600 border-slate-200'}`}>
                         {label}
                       </button>
                     ))}
                   </div>
-                  <textarea rows={2} placeholder="Or describe the reason…" value={reason} onChange={e=>setReason(e.target.value)}
+                  <textarea rows={2} placeholder={reasonCat === "other" ? "Required — describe the reason…" : "Additional details (optional)…"} value={reason} onChange={e=>setReason(e.target.value)}
                     className="w-full px-3.5 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm outline-none focus:border-slate-400 focus:bg-white resize-none"/>
                 </div>
                 <div className="flex gap-3 px-6 py-4 border-t border-slate-100 flex-shrink-0">
                   <button onClick={()=>setPauseOpen(false)} className="flex-1 py-3 border border-slate-200 text-slate-700 font-bold text-sm rounded-2xl hover:bg-slate-50">Cancel</button>
-                  <button onClick={pause} disabled={busy||!reason.trim()} className="flex-1 py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm rounded-2xl disabled:opacity-60">Confirm Pause</button>
+                  <button onClick={pause} disabled={busy || !reasonCat || (reasonCat==="other" && !reason.trim())} className="flex-1 py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm rounded-2xl disabled:opacity-60">Confirm Pause</button>
                 </div>
               </div>
             </div>
@@ -249,6 +269,42 @@ function WorkerActions({ ticket, billing, onAnyChange }) {
       {/* Completion modal */}
       {completionOpen && (
         <CompletionModal ticket={ticket} onClose={()=>setCompletionOpen(false)} onSuccess={()=>{ setCompletionOpen(false); onAnyChange?.(); }}/>
+      )}
+      {/* PLC Type Modal — portaled to body */}
+      {plcModalOpen && createPortal(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.6)',zIndex:99999,display:'flex',alignItems:'center',justifyContent:'center',padding:'0 1rem'}}>
+          <div style={{background:'#fff',borderRadius:'1.5rem',width:'100%',maxWidth:'24rem',padding:'1.5rem',boxShadow:'0 25px 50px rgba(0,0,0,0.3)'}}>
+            <h3 style={{fontSize:'0.9rem',fontWeight:900,color:'#0f172a',marginBottom:'0.25rem'}}>Select Work Type</h3>
+            <p style={{fontSize:'0.75rem',color:'#94a3b8',marginBottom:'1.5rem'}}>How are you working on this ticket?</p>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0.75rem',marginBottom:'1rem'}}>
+              <button onClick={() => confirmStart('onsite')}
+                style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'0.75rem',padding:'1.25rem',borderRadius:'1rem',border:'2px solid #e2e8f0',background:'#fff',cursor:'pointer'}}
+                onMouseEnter={e=>{e.currentTarget.style.borderColor='#0f172a';e.currentTarget.style.background='#f8fafc'}}
+                onMouseLeave={e=>{e.currentTarget.style.borderColor='#e2e8f0';e.currentTarget.style.background='#fff'}}>
+                <span style={{fontSize:'2rem'}}>🏢</span>
+                <div style={{textAlign:'center'}}>
+                  <div style={{fontSize:'0.875rem',fontWeight:900,color:'#0f172a'}}>On-site</div>
+                  <div style={{fontSize:'0.75rem',color:'#94a3b8',marginTop:'0.125rem'}}>At customer location</div>
+                </div>
+              </button>
+              <button onClick={() => confirmStart('remote')}
+                style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'0.75rem',padding:'1.25rem',borderRadius:'1rem',border:'2px solid #e2e8f0',background:'#fff',cursor:'pointer'}}
+                onMouseEnter={e=>{e.currentTarget.style.borderColor='#3b82f6';e.currentTarget.style.background='#eff6ff'}}
+                onMouseLeave={e=>{e.currentTarget.style.borderColor='#e2e8f0';e.currentTarget.style.background='#fff'}}>
+                <span style={{fontSize:'2rem'}}>💻</span>
+                <div style={{textAlign:'center'}}>
+                  <div style={{fontSize:'0.875rem',fontWeight:900,color:'#0f172a'}}>Remote</div>
+                  <div style={{fontSize:'0.75rem',color:'#94a3b8',marginTop:'0.125rem'}}>Working remotely</div>
+                </div>
+              </button>
+            </div>
+            <button onClick={() => setPlcModalOpen(false)}
+              style={{width:'100%',padding:'0.625rem',fontSize:'0.875rem',color:'#64748b',background:'none',border:'none',cursor:'pointer',fontWeight:500}}>
+              Cancel
+            </button>
+          </div>
+        </div>,
+        document.body
       )}
     </>
   );
@@ -731,6 +787,31 @@ export default function TicketDetailPage() {
                   <div>
                     <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Description</p>
                     <textarea rows={3} className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:border-slate-400 resize-none" value={editForm.description||''} onChange={e=>setEditForm(p=>({...p,description:e.target.value}))}/>
+                  {/* Warranty Status toggle */}
+                  <div className="col-span-full">
+                    <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">Warranty Status</p>
+                    <div className="flex gap-3">
+                      <button type="button"
+                        onClick={() => setEditForm(p => ({ ...p, warranty_status: 'in_warranty' }))}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-xl border text-xs font-bold transition-all ${
+                          editForm.warranty_status === 'in_warranty'
+                            ? 'bg-violet-600 text-white border-violet-600'
+                            : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
+                        }`}>
+                        🛡️ In Warranty {editForm.warranty_status === 'in_warranty' && '✓'}
+                      </button>
+                      <button type="button"
+                        onClick={() => setEditForm(p => ({ ...p, warranty_status: 'out_of_warranty' }))}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-xl border text-xs font-bold transition-all ${
+                          editForm.warranty_status === 'out_of_warranty'
+                            ? 'bg-amber-500 text-white border-amber-500'
+                            : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
+                        }`}>
+                        💰 Billable {editForm.warranty_status === 'out_of_warranty' && '✓'}
+                      </button>
+                    </div>
+                  </div>
+
                   {/* PLC / Wiring toggles */}
                   <div className="col-span-full">
                     <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">Work Required</p>
@@ -772,7 +853,7 @@ export default function TicketDetailPage() {
                 </div>
               )}
               {/* PLC type toggle — visible to workers and admins when PLC is required */}
-              {ticket.needs_plc && (isWorker || can('assign_workers')) && (
+              {/* {ticket.needs_plc && (isWorker || can('assign_workers')) && (
                 <div className="mt-4 flex items-center gap-3">
                   <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">PLC Type</p>
                   <div className="flex gap-2">
@@ -795,7 +876,7 @@ export default function TicketDetailPage() {
                   </div>
                   {!ticket.plc_type && <span className="text-[10px] text-amber-600 font-bold">⚠ Please select type</span>}
                 </div>
-              )}
+              )} */}
 
               {ticket.description && (
                 <div className="mt-4 bg-amber-50 border border-amber-200 rounded-xl px-3.5 py-3">
@@ -847,6 +928,11 @@ export default function TicketDetailPage() {
                     <div key={s.id} className="flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-xl border border-slate-200">
                       <span className="text-xs font-bold text-slate-700">{s.worker_name}</span>
                       <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${s.status==='running'?'bg-emerald-100 text-emerald-700':s.status==='paused'?'bg-amber-100 text-amber-700':'bg-slate-100 text-slate-600'}`}>{s.status}</span>
+                      {s.session_plc_type && (
+                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${s.session_plc_type==='onsite'?'bg-orange-100 text-orange-700':'bg-blue-100 text-blue-700'}`}>
+                          {s.session_plc_type==='onsite'?'🏢 On-site':'💻 Remote'}
+                        </span>
+                      )}
                       <span className="text-[11px] text-slate-500 ml-auto">{fmtH(s.total_seconds||0)}</span>
                       <span className="text-[10px] text-slate-400">{fmtDate(s.started_at)}</span>
                     </div>

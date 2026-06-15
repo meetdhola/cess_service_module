@@ -900,6 +900,20 @@ router.get('/:id/rate-suggestion', svcAuth(['admin','superadmin']), svcPerm('vie
                   ELSE ws.total_seconds END)
                 FROM work_sessions ws WHERE ws.ticket_id=$1 AND ws.worker_id=su.id
               ), 0) AS total_seconds,
+              COALESCE((
+                SELECT SUM(CASE WHEN ws.status='running'
+                  THEN ws.total_seconds + EXTRACT(EPOCH FROM (NOW()-ws.started_at))::int
+                  ELSE ws.total_seconds END)
+                FROM work_sessions ws WHERE ws.ticket_id=$1 AND ws.worker_id=su.id
+                AND ws.session_plc_type='onsite'
+              ), 0) AS onsite_seconds,
+              COALESCE((
+                SELECT SUM(CASE WHEN ws.status='running'
+                  THEN ws.total_seconds + EXTRACT(EPOCH FROM (NOW()-ws.started_at))::int
+                  ELSE ws.total_seconds END)
+                FROM work_sessions ws WHERE ws.ticket_id=$1 AND ws.worker_id=su.id
+                AND ws.session_plc_type='remote'
+              ), 0) AS remote_seconds,
               twb.charged_amount, twb.charged_note,
               twb.expense_amount, twb.expense_note,
               twb.completion_report_path, twb.expense_file_path, twb.completed_by_worker_at
@@ -982,6 +996,8 @@ router.get('/:id/rate-suggestion', svcAuth(['admin','superadmin']), svcPerm('vie
         worker_seniority: w.worker_seniority,
         assigned_role:    w.assigned_role,
         hours:            +hours.toFixed(2),
+        onsite_hours:     +(Number(w.onsite_seconds||0)/3600).toFixed(2),
+        remote_hours:     +(Number(w.remote_seconds||0)/3600).toFixed(2),
         suggested_amount: Math.round(suggested),
         basis,
         half_day_rate:    halfDayAmount,

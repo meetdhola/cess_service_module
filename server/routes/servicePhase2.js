@@ -558,7 +558,9 @@ router.get('/tickets/:id/full', svcAuth(), async (req, res) => {
         `SELECT ta.*, su.name AS worker_name FROM ticket_assignments ta
            JOIN service_users su ON su.id=ta.worker_id WHERE ta.ticket_id=$1`, [ticketUUID]),
       pool.query(
-        `SELECT ws.*, su.name AS worker_name FROM work_sessions ws
+        `SELECT ws.*, su.name AS worker_name,
+                su.role AS worker_role
+           FROM work_sessions ws
            JOIN service_users su ON su.id=ws.worker_id
           WHERE ws.ticket_id=$1 ORDER BY ws.started_at DESC`, [ticketUUID]),
       pool.query(

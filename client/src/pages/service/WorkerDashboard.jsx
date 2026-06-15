@@ -1107,11 +1107,29 @@ const [sessions,  setSessions]  = useState({});   // ticketId -> session object 
     return () => { clearInterval(tick.current); tick.current = null; };
   }, [sessions]);
 
-const startTimer = async (id, needsAssign=false) => {
+// PLC type modal state
+  const [plcModalTicket, setPlcModalTicket] = useState(null); // {id, needsAssign}
+
+  const startTimer = (id, needsAssign=false) => {
+    // Only show PLC type modal for PLC workers
+    console.log('[startTimer] svcUser.role:', svcUser?.role, 'isPLC:', svcUser?.role === 'plc');
+    if (svcUser?.role === 'plc') {
+      setPlcModalTicket({ id, needsAssign });
+    } else {
+      // Wireman and others start directly as onsite
+      confirmStartTimer('onsite', id, needsAssign);
+    }
+  };
+
+  const confirmStartTimer = async (plcType, directId=null, directNeedsAssign=false) => {
+    const id = directId || plcModalTicket?.id;
+    const needsAssign = directId ? directNeedsAssign : plcModalTicket?.needsAssign;
+    if (!id) return;
+    setPlcModalTicket(null);
     setBusy(true);
     try {
       if (needsAssign) { await svcApi.post(`/tickets/${id}/self-assign`).catch(()=>{}); }
-      await svcApi.post('/sessions/start', { ticket_id:id });
+      await svcApi.post('/sessions/start', { ticket_id: id, plc_type: plcType });
       await loadActive(); await loadTickets();
     }
     catch(e){ alert(e.response?.data?.error || 'Failed'); }
@@ -1619,7 +1637,42 @@ const startTimer = async (id, needsAssign=false) => {
         </div>
       </div>
 
-      {/* ── PAUSE MODAL ── */}
+      {/* ── PLC TYPE SELECTION MODAL ── */}
+  {plcModalTicket && (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center px-4" style={{zIndex:99999}}>
+      <div className="bg-white rounded-3xl w-full max-w-sm shadow-2xl p-6" style={{position:'relative',zIndex:100000}}>
+        <h3 className="text-base font-black text-slate-900 mb-1">Select Work Type</h3>
+        <p className="text-xs text-slate-400 mb-6">How are you working on this ticket?</p>
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <button
+            onClick={() => confirmStartTimer('onsite', null, false)}
+            className="flex flex-col items-center gap-3 p-5 rounded-2xl border-2 border-slate-200 hover:border-slate-900 hover:bg-slate-50 transition-all group">
+            <span className="text-3xl">🏢</span>
+            <div className="text-center">
+              <div className="text-sm font-black text-slate-900">On-site</div>
+              <div className="text-xs text-slate-400 mt-0.5">At customer location</div>
+            </div>
+          </button>
+          <button
+            onClick={() => confirmStartTimer('remote', null, false)}
+            className="flex flex-col items-center gap-3 p-5 rounded-2xl border-2 border-slate-200 hover:border-blue-500 hover:bg-blue-50 transition-all group">
+            <span className="text-3xl">💻</span>
+            <div className="text-center">
+              <div className="text-sm font-black text-slate-900">Remote</div>
+              <div className="text-xs text-slate-400 mt-0.5">Working remotely</div>
+            </div>
+          </button>
+        </div>
+        <button
+          onClick={() => setPlcModalTicket(null)}
+          className="w-full py-2.5 text-sm text-slate-500 hover:text-slate-700 font-medium">
+          Cancel
+        </button>
+      </div>
+    </div>
+  )}
+
+    {/* ── PAUSE MODAL ── */}
       {pauseTicketId && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4" onClick={e=>e.target===e.currentTarget&&setPauseTicketId(null)}>
           <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl shadow-slate-900/20 p-6 sm:p-8">

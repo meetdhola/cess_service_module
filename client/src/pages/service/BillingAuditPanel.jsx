@@ -143,6 +143,12 @@ export default function BillingAuditPanel({ ticketId, isWarranty, isPrivileged }
                 {sg && (
                   <span className="text-[9px] font-bold text-slate-500 bg-white border border-slate-200 px-1.5 py-0.5 rounded">
                     {sg.hours}h · {sg.basis}
+                    {(sg.onsite_hours > 0 || sg.remote_hours > 0) && (
+                      <span className="ml-1.5 inline-flex gap-1">
+                        {sg.onsite_hours > 0 && <span className="text-orange-500">🏢 {sg.onsite_hours}h</span>}
+                        {sg.remote_hours > 0 && <span className="text-blue-500">💻 {sg.remote_hours}h</span>}
+                      </span>
+                    )}
                     {sg?.half_day_rate > 0 && (
                       <> · <span className="text-slate-400">½d ₹{(sg.half_day_rate||0).toLocaleString('en-IN')} · full ₹{(sg.full_day_rate||0).toLocaleString('en-IN')}</span></>
                     )}

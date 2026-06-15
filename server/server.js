@@ -17,6 +17,7 @@ const SECRET = process.env.JWT_SECRET || 'cess_secret_2526';
 app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use(express.static(path.join(__dirname, '../client/public')));
 
 // Attach io to every request so routes can emit
 app.use((req, _res, next) => { req.io = io; next(); });
@@ -49,11 +50,11 @@ app.get('/api/service/parties/search', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+app.use('/api/service', require('./routes/servicePhase2'));
 app.use('/api/service/tickets',  require('./routes/serviceTickets'));
 app.use('/api/service/sessions', require('./routes/serviceSessions'));
 app.use('/api/service/reports',  require('./routes/serviceReports'));
 app.use('/api/service/reports',  require('./routes/serviceProfitability'));
-app.use('/api/service', require('./routes/servicePhase2'));
 app.use('/api/service/notifications', require('./routes/serviceNotifications.js'))
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }));

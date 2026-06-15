@@ -9,6 +9,7 @@ import { useSocket } from '../../useSocket';
 import { ChallanPanel, InvoiceEditor } from './ChallanInvoice';
 import { ReopenModal, ReopenHistory }  from './ReopenComponents';
 import NotesPanel from './NotesPanel';
+import WorkLogPanel from './WorkLogPanel';
 import ScheduledTasksPanel from './ScheduledTasksPanel';
 import TicketPdfReport from './TicketPdfReport';
 
@@ -867,6 +868,10 @@ export default function TicketDetailPage() {
             {/* Notes thread */}
             <section className="bg-white rounded-3xl border border-slate-200/60 p-4">
               <NotesPanel ticketId={ticket.id} currentUserId={svcUser?.id}/>
+            </section>
+            {/* Work Log */}
+            <section className="bg-white rounded-3xl border border-slate-200/60 overflow-hidden">
+              <WorkLogPanel ticketId={ticket.id} currentUserId={svcUser?.id} currentUserRole={svcUser?.role}/>
             </section>
           </aside>
         </div>

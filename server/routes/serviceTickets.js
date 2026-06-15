@@ -1057,4 +1057,51 @@ router.patch('/:id/edit', svcAuth(['admin','superadmin']), svcPerm('assign_worke
   }
 });
 
+// ── Work Logs ──────────────────────────────────────────────────────────────
+router.get('/:id/work-logs', svcAuth(['admin','superadmin','plc','wireman']), async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT wl.*, su.name AS worker_name, su.role AS worker_role
+       FROM ticket_work_logs wl
+       JOIN service_users su ON su.id = wl.worker_id
+       WHERE wl.ticket_id = $1
+       ORDER BY wl.log_date DESC, wl.log_time DESC`,
+      [req.params.id]);
+    res.json(rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/:id/work-logs', svcAuth(['admin','superadmin','plc','wireman']), async (req, res) => {
+  try {
+    const { description, log_date, log_time } = req.body;
+    if (!description?.trim()) return res.status(400).json({ error: 'Description required' });
+    const { rows } = await pool.query(
+      `INSERT INTO ticket_work_logs (ticket_id, worker_id, log_date, log_time, description)
+       VALUES ($1, $2, $3::date, $4::time, $5) RETURNING *`,
+      [req.params.id, req.svcUser.id,
+       log_date || new Date().toISOString().slice(0,10),
+       log_time || new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'Asia/Kolkata'}),
+       description.trim()]);
+    const { rows: full } = await pool.query(
+      `SELECT wl.*, su.name AS worker_name, su.role AS worker_role
+       FROM ticket_work_logs wl JOIN service_users su ON su.id=wl.worker_id
+       WHERE wl.id=$1`, [rows[0].id]);
+    res.json(full[0]);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/:id/work-logs/:logId', svcAuth(['admin','superadmin','plc','wireman']), async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT worker_id FROM ticket_work_logs WHERE id=$1 AND ticket_id=$2`,
+      [req.params.logId, req.params.id]);
+    if (!rows.length) return res.status(404).json({ error: 'Not found' });
+    const isMine  = rows[0].worker_id === req.svcUser.id;
+    const isAdmin = ['admin','superadmin'].includes(req.svcUser.role);
+    if (!isMine && !isAdmin) return res.status(403).json({ error: 'Not allowed' });
+    await pool.query(`DELETE FROM ticket_work_logs WHERE id=$1`, [req.params.logId]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;

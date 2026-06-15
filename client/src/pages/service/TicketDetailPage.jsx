@@ -766,10 +766,25 @@ export default function TicketDetailPage() {
                     </div>
                     <div>
                       <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Sales Agent</p>
-                      <select className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:border-slate-400 bg-white" value={editForm.sales_agent||''} onChange={e=>setEditForm(p=>({...p,sales_agent:e.target.value}))}>
+                      <select className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:border-slate-400 bg-white"
+                        value={agentList.includes(editForm.sales_agent||'') ? (editForm.sales_agent||'') : (editForm.sales_agent ? '__other__' : '')}
+                        onChange={e => {
+                          if (e.target.value === '__other__') setEditForm(p=>({...p, sales_agent:''}));
+                          else setEditForm(p=>({...p, sales_agent:e.target.value}));
+                        }}>
                         <option value="">— Select agent —</option>
                         {agentList.map(a => <option key={a} value={a}>{a}</option>)}
+                        <option value="__other__">Other (type manually)</option>
                       </select>
+                      {(editForm.sales_agent !== undefined && !agentList.includes(editForm.sales_agent) && (editForm.sales_agent !== '' || !agentList.includes(ticket.sales_agent))) && (
+                        <input
+                          className="w-full mt-2 px-3 py-2 text-xs border border-blue-300 rounded-xl outline-none focus:border-blue-500"
+                          placeholder="Type agent name…"
+                          value={editForm.sales_agent||''}
+                          onChange={e=>setEditForm(p=>({...p,sales_agent:e.target.value}))}
+                          autoFocus
+                        />
+                      )}
                     </div>
                     <div>
                       <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Deadline Date</p>

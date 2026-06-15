@@ -725,10 +725,24 @@ export default function InquiryForm() {
               <div><FLabel>Contact Phone</FLabel><FInput type="tel" placeholder="+91 98765 43210" value={form.contact_phone} onChange={e=>set('contact_phone',e.target.value)}/></div>
               <div><FLabel>Designation</FLabel><FInput placeholder="e.g. Plant Manager" value={form.designation} onChange={e=>set('designation',e.target.value)}/></div>
               <div><FLabel>Sales Agent</FLabel>
-                <FSel value={form.sales_agent} onChange={e=>set('sales_agent',e.target.value)}>
+                <FSel
+                  value={agents.includes(form.sales_agent||'') ? (form.sales_agent||'') : (form.sales_agent ? '__other__' : '')}
+                  onChange={e => {
+                    if (e.target.value === '__other__') set('sales_agent','');
+                    else set('sales_agent', e.target.value);
+                  }}>
                   <option value="">— Select agent —</option>
                   {agents.map(a=><option key={a}>{a}</option>)}
+                  <option value="__other__">Other (type manually)</option>
                 </FSel>
+                {form.sales_agent !== undefined && !agents.includes(form.sales_agent) && (
+                  <FInput
+                    placeholder="Type agent name…"
+                    value={form.sales_agent||''}
+                    onChange={e=>set('sales_agent',e.target.value)}
+                    style={{marginTop:'0.5rem',borderColor:'#93c5fd'}}
+                  />
+                )}
               </div>
               <div><FLabel>Customer Ask Date / Deadline</FLabel>
                 <FInput type="date" value={form.deadline_date} onChange={e=>set('deadline_date',e.target.value)}/>

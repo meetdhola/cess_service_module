@@ -17,24 +17,24 @@ function pickPricing(worker, ticket, pricingRows) {
   return row || null;
 }
 
-function computeRevenue(ticket, pricing, hoursWorked) {
+function computeRevenue(ticket, pricing, hoursWorked, dailyHours) {
   if (ticket.override_rate) return Number(ticket.override_rate);
   if (!pricing) return 0;
-
-  // Half-day explicitly requested
   if (ticket.billing_mode === 'half_day') return Number(pricing.half_day_rate || 0);
-
-  // Grade-based pricing (only if explicitly set)
+  const halfCutoff = (dailyHours || 9) / 2;
+  const minCharge  = 1500;
+  const grade      = (ticket.customer_grade || 'B').toLowerCase();
+  let fullDayRate;
   if (ticket.billing_mode === 'grade_rate') {
-    const grade = (ticket.customer_grade || 'B').toLowerCase();
-    return Number(pricing[`grade_${grade}_rate`] || pricing.per_day_rate || 0);
+    fullDayRate = Number(pricing['grade_' + grade + '_rate'] || pricing.per_day_rate || 0);
+  } else {
+    fullDayRate = Number(pricing.per_day_rate || 0);
   }
-
-  // Default: per-day rate (ignores grades) — auto half-day if ≤4h
-  if (hoursWorked > 0 && hoursWorked <= 4) {
-    return Number(pricing.half_day_rate || (pricing.per_day_rate * 0.6) || 0);
-  }
-  return Number(pricing.per_day_rate || 0);
+  const halfDayRate = Number(pricing.half_day_rate || fullDayRate * 0.6 || 0);
+  if (hoursWorked === 0)           return 0;
+  if (hoursWorked < 1)             return minCharge;
+  if (hoursWorked <= halfCutoff)   return halfDayRate;
+  return fullDayRate;
 }
 
 // function computeRevenue(ticket, pricing, hoursWorked) {

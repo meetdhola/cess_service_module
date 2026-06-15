@@ -925,17 +925,24 @@ router.get('/:id/rate-suggestion', svcAuth(['admin','superadmin']), svcPerm('vie
     function computeRevenue(ticket, pricing, hours, dailyHours) {
       if (ticket.override_rate) return Number(ticket.override_rate);
       if (!pricing) return 0;
-      if (ticket.billing_mode === 'grade_rate') {
-        const grade = (ticket.customer_grade || 'B').toLowerCase();
-        return Number(pricing['grade_' + grade + '_rate'] || 0);
-      }
       if (ticket.billing_mode === 'half_day') return Number(pricing.half_day_rate || 0);
-      const minCharge  = Number(pricing.minimum_visit_charge || 1500);
-      const halfCutoff = (dailyHours || 9) / 2; // e.g. 9h day → 4.5h half
-      if (hours === 0)              return 0;
-      if (hours < 1)                return minCharge;
-      if (hours <= halfCutoff)      return Number(pricing.half_day_rate || 0);
-      return Number(pricing.per_day_rate || 0);
+      const halfCutoff = (dailyHours || 9) / 2;
+      const minCharge  = 1500;
+      const grade      = (ticket.customer_grade || 'B').toLowerCase();
+      // Get full-day rate based on billing mode
+      let fullDayRate;
+      if (ticket.billing_mode === 'grade_rate') {
+        fullDayRate = Number(pricing['grade_' + grade + '_rate'] || pricing.per_day_rate || 0);
+      } else {
+        fullDayRate = Number(pricing.per_day_rate || 0);
+      }
+      // Half-day rate
+      const halfDayRate = Number(pricing.half_day_rate || fullDayRate * 0.6 || 0);
+      // 3-tier logic for ALL modes
+      if (hours === 0)           return 0;
+      if (hours < 1)             return minCharge;
+      if (hours <= halfCutoff)   return halfDayRate;
+      return fullDayRate;
     }
 
     const toUrl = (p) => !p ? null : p.startsWith('/uploads') ? p : '/uploads/' + p;
@@ -951,15 +958,15 @@ router.get('/:id/rate-suggestion', svcAuth(['admin','superadmin']), svcPerm('vie
       // Auto-suggest based on tier logic
       const suggested = isWarranty ? 0 : computeRevenue(ticket, pricing, hours, dailyHours);
 
+      const gradeLabel = ticket.billing_mode==='grade_rate' ? ' · Grade '+String(ticket.customer_grade||'B').toUpperCase()+' rate' : '';
       let basis;
-      if (isWarranty)                           basis = 'Warranty — no charge';
-      else if (ticket.override_rate)            basis = 'Override rate';
+      if (isWarranty)                            basis = 'Warranty — no charge';
+      else if (ticket.override_rate)             basis = 'Override rate';
       else if (ticket.billing_mode==='half_day') basis = 'Half-day rate';
-      else if (ticket.billing_mode==='grade_rate') basis = 'Grade ' + String(ticket.customer_grade||'B').toUpperCase() + ' rate';
-      else if (hours === 0)                     basis = 'No sessions yet';
-      else if (hours < 1)                       basis = `${Math.round(hours*60)}min → minimum visit charge`;
-      else if (hours <= halfCutoff)             basis = `${hours.toFixed(1)}h → half-day (≤${halfCutoff}h)`;
-      else                                      basis = `${hours.toFixed(1)}h → full-day (>${halfCutoff}h)`;
+      else if (hours === 0)                      basis = 'No sessions yet';
+      else if (hours < 1)                        basis = `${Math.round(hours*60)}min → minimum visit charge${gradeLabel}`;
+      else if (hours <= halfCutoff)              basis = `${hours.toFixed(2)}h → half-day (≤${halfCutoff}h)${gradeLabel}`;
+      else                                       basis = `${hours.toFixed(2)}h → full-day (>${halfCutoff}h)${gradeLabel}`;
 
       // Half + full day rates for display
       const halfDayAmount = isWarranty ? 0 : (pricing ? Math.round(Number(pricing.half_day_rate || 0)) : 0);

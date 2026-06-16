@@ -1184,7 +1184,16 @@ const [sessions,  setSessions]  = useState({});   // ticketId -> session object 
   const isPLC = svcUser?.role==='plc';
   const totalWorked = history.reduce((a,s)=>a+(s.total_seconds||0),0);
   const DONE_STATUSES = ['Completed','Closed','Report Submitted'];
-  const counts = { total:tickets.length, pending:tickets.filter(t=>['Open','Assigned'].includes(t.status)).length, active:tickets.filter(t=>t.status==='In Progress').length, done:tickets.filter(t=>DONE_STATUSES.includes(t.status)).length };
+  const dateFilterTickets = (arr) => arr.filter(t => {
+    if (!taskDateFrom && !taskDateTo) return true;
+    const isDone = DONE_STATUSES.includes(t.status);
+    const d = (isDone ? t.updated_at : t.created_at)?.slice(0,10) || '';
+    if (taskDateFrom && d < taskDateFrom) return false;
+    if (taskDateTo   && d > taskDateTo)   return false;
+    return true;
+  });
+  const dft = dateFilterTickets(tickets);
+  const counts = { total:dft.length, pending:dft.filter(t=>['Open','Assigned'].includes(t.status)).length, active:dft.filter(t=>t.status==='In Progress').length, done:dft.filter(t=>DONE_STATUSES.includes(t.status)).length };
 
   // Build 7-day chart data from history using daily_seconds for accuracy
   const chartData = (() => {
@@ -1382,7 +1391,10 @@ const [sessions,  setSessions]  = useState({});   // ticketId -> session object 
                   {(() => {
                     const dateFiltered = tickets.filter(t => {
                       if (!taskDateFrom && !taskDateTo) return true;
-                      const d = t.created_at?.slice(0,10) || '';
+                      // For completed/closed tickets, filter by updated_at (when they finished)
+                      // For active tickets, filter by created_at
+                      const isDone = ['Completed','Closed','Report Submitted'].includes(t.status);
+                      const d = (isDone ? t.updated_at : t.created_at)?.slice(0,10) || '';
                       if (taskDateFrom && d < taskDateFrom) return false;
                       if (taskDateTo   && d > taskDateTo)   return false;
                       return true;

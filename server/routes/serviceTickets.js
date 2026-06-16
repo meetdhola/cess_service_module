@@ -139,8 +139,16 @@ router.get('/my', svcAuth(['plc','wireman','admin','superadmin']), async (req, r
       EXISTS(SELECT 1 FROM ticket_assignments ta5 WHERE ta5.ticket_id=t.id AND ta5.worker_id=$1)
       OR t.status = 'Open'
     )
-    AND t.status NOT IN ('Closed','Completed')
+    AND (
+      t.status NOT IN ('Closed','Completed')
+      OR (
+        t.status IN ('Closed','Completed','Report Submitted')
+        AND EXISTS(SELECT 1 FROM ticket_assignments ta7 WHERE ta7.ticket_id=t.id AND ta7.worker_id=$1)
+        AND t.updated_at >= NOW() - INTERVAL '30 days'
+      )
+    )
     ORDER BY
+      CASE WHEN t.status NOT IN ('Closed','Completed','Report Submitted') THEN 0 ELSE 1 END ASC,
       EXISTS(SELECT 1 FROM ticket_assignments ta6 WHERE ta6.ticket_id=t.id AND ta6.worker_id=$1) DESC,
       t.created_at DESC`, [req.svcUser.id]);
     res.json(rows);

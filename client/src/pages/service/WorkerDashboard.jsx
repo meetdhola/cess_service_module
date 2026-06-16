@@ -1370,10 +1370,10 @@ const [sessions,  setSessions]  = useState({});   // ticketId -> session object 
                   <div className="px-3 py-2 border-b border-slate-100 overflow-x-auto scrollbar-hide">
                     <div className="flex items-center gap-1.5 min-w-max">
                       {[
-                        { k:'All',           label:'All',         count: tickets.length,                                                              dot:'bg-slate-400' },
-                        { k:'Pending',       label:'Pending',     count: tickets.filter(t=>['Open','Assigned'].includes(t.status)).length,           dot:'bg-amber-400' },
-                        { k:'In Progress',   label:'In Progress', count: tickets.filter(t=>t.status==='In Progress').length,                          dot:'bg-blue-500'  },
-                        { k:'Completed',     label:'Completed',   count: tickets.filter(t=>['Completed','Closed','Report Submitted'].includes(t.status)).length, dot:'bg-emerald-500' },
+                        { k:'All',           label:'All',         count: dft.length,                                                              dot:'bg-slate-400' },
+                        { k:'Pending',       label:'Pending',     count: dft.filter(t=>['Open','Assigned'].includes(t.status)).length,           dot:'bg-amber-400' },
+                        { k:'In Progress',   label:'In Progress', count: dft.filter(t=>t.status==='In Progress').length,                          dot:'bg-blue-500'  },
+                        { k:'Completed',     label:'Completed',   count: dft.filter(t=>['Completed','Closed','Report Submitted'].includes(t.status)).length, dot:'bg-emerald-500' },
                       ].map(t => (
                         <button key={t.k} onClick={()=>setTaskFilter(t.k)}
                           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold transition-all whitespace-nowrap ${
